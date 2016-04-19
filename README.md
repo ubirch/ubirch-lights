@@ -13,6 +13,12 @@ that run for a long time on battery and work world-wide.
 Expects an installation of the [Arduino IDE](https://www.arduino.cc/) + [AVR compiler](https://github.com/osx-cross/homebrew-avr/)
 and [CMake](https://cmake.org/).
 
+Please clone the repository recursively to ensure all submodules are also checked out:
+```
+git clone --recursive https://github.com/ubirch/ubirch-lights
+```
+
+Then build the code:
 ```
 cd ubirch-lights
 mkdir build
