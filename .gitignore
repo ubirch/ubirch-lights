@@ -1,0 +1,7 @@
+# config.h is used for local configurations that should not be published
+config.h
+.idea/
+sketches/libraries/Adafruit_NeoPixel
+sketches/libraries/ISL29125_Breakout
+sketches/libraries/ubirch-sim800
+build/
