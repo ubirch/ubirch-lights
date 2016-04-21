@@ -8,7 +8,7 @@ that run for a long time on battery and work world-wide.
 
 ## Building
 
-> Thise code is for the ```ubirch #1 r0.1```, Arduino compatible.
+> This code is for the ```ubirch #1 r0.1```, Arduino compatible.
 
 Expects an installation of the [Arduino IDE](https://www.arduino.cc/) + [AVR compiler](https://github.com/osx-cross/homebrew-avr/)
 and [CMake](https://cmake.org/).
