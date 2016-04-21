@@ -3,8 +3,9 @@ target_link_libraries(lights-sensor arduino-core SoftwareSerial nacl)
 
 # special external dependencies can be added like this and will be downloaded once
 # arguments: <target> <name> <git url>
+target_sketch_library(lights-sensor i2c "")
+target_sketch_library(lights-sensor isl29125 "")
 target_sketch_library(lights-sensor ubirch-sim800 "git@github.com:ubirch/ubirch-sim800.git")
-target_sketch_library(lights-sensor ISL29125_Breakout "https://github.com/sparkfun/ISL29125_Breakout")
 target_sketch_library(lights-sensor arduino-base64 "https://github.com/adamvr/arduino-base64")
 
 # copy the config.h.template to config.h in case it is not there; it is ignored by .git!

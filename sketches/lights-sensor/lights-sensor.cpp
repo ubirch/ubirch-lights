@@ -26,11 +26,12 @@
 #include <avr/wdt.h>
 #include <Arduino.h>
 #include <UbirchSIM800.h>
-#include <SparkFunISL29125.h>
 #include <Base64.h>
 
 extern "C" {
 #include <avrnacl.h>
+#include <i2c.h>
+#include <isl29125.h>
 }
 
 #ifndef BAUD
@@ -42,12 +43,12 @@ extern "C" {
 #define led 13
 #define trigger 6
 
-SFE_ISL29125 RGB_sensor;
+//SFE_ISL29125 RGB_sensor;
 UbirchSIM800 sim800h = UbirchSIM800();
 
 static int loop_counter = 1;
-static uint8_t sensor_config = CFG1_375LUX | CFG1_12BIT;
-static uint8_t sensor_config_ir = CFG2_IR_ADJUST_MID;
+static uint8_t sensor_config = ISL_MODE_375LUX | ISL_MODE_12BIT | ISL_MODE_RGB;
+static uint8_t sensor_config_ir = ISL_FILTER_IR_NONE + 0x20;
 
 void sleepabit(int howlong) {
   int i2 = 0;
@@ -76,31 +77,33 @@ void sleepabit(int howlong) {
   wdt_disable();
 }
 
-void getRGB(uint8_t &red1, uint8_t &green1, uint8_t &blue1) {
-  RGB_sensor.init();
-  RGB_sensor.config(CFG1_MODE_RGB | sensor_config, sensor_config_ir, CFG_DEFAULT);
-  delay(300);
+void getRGB(uint8_t &red, uint8_t &green, uint8_t &blue) {
+  i2c_init(I2C_SPEED_400KHZ);
 
-  while (!(RGB_sensor.readStatus() & FLAG_CONV_DONE)) Serial.print("?");
+  isl_reset();
+  isl_set(ISL_R_COLOR_MODE, sensor_config);
+  isl_set(ISL_R_FILTERING, sensor_config_ir);
+
+  while (!(isl_get(ISL_R_STATUS) & ISL_STATUS_ADC_DONE)) Serial.write('%');
   Serial.println();
   for (uint8_t n = 0; n < 5; n++) {
-    red1 = RGB_sensor.readRed() >> 8;
-    green1 = RGB_sensor.readGreen() >> 8;
-    blue1 = RGB_sensor.readBlue() >> 8;
+    red = isl_read_red8();
+    green = isl_read_green8();
+    blue = isl_read_blue8();
   }
   Serial.println(F("RGB conversion done."));
 
-  Serial.print(red1);
+  Serial.print(red);
   Serial.print(F(":"));
-  Serial.print(green1);
+  Serial.print(green);
   Serial.print(F(":"));
-  Serial.println(blue1);
+  Serial.println(blue);
 }
 
 void SendGPS() {
   uint8_t red1 = 0, green1 = 0, blue1 = 0;
   uint16_t bat_status = 0, bat_percent = 0, bat_voltage = 0;
-  char *lat, *lon, *imei;
+  char *lat, *lon;
   char *payload, *payload_hash, *auth_hash;
   char *sig, *message;
 
