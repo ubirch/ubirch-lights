@@ -12,9 +12,9 @@ set(CMAKE_TOOLCHAIN_FILE cmake/avr-arduino-toolchain.cmake)
 # project name and code types we use
 project(ubirch C CXX ASM)
 
-# adding our libraries, sources
-add_libraries(lib)
-add_sources(src)
+# NaCL AVR lib (sha256)
+include_directories(SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/../../avrnacl-20140813)
+link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../avrnacl-20140813/avrnacl_small/obj)
 
 # add the sketches directory (contains sketch directories and
 # a "libraries" dir where dependent libs are extracted

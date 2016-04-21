@@ -1,14 +1,31 @@
-//
-// Adapted from Stephan Nollers code
-//
-// copy config_template.h to config.h and set the correct values
-//
-#include "UbirchSIM800.h"
+/**
+ * ubirch lights lamp (ubirch #1 r0.1)
+ *
+ * Adapted from Stephan Nollers code.
+ *
+ * copy config_template.h to config.h and set the correct values
+ *
+ * Copyright 2015 ubirch GmbH (http://www.ubirch.com)
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "config.h"
 
 #include <avr/sleep.h>
 #include <avr/wdt.h>
 #include <Adafruit_NeoPixel.h>
+#include <UbirchSIM800.h>
 
 #ifndef BAUD
 #   define BAUD 9600
@@ -77,7 +94,7 @@ void sleepabit(int howlong) {
 bool getBatteryStatus(uint16_t &bat_status, uint16_t &bat_percent, uint16_t &bat_voltage) {
   sim800h.println(F("AT+CBC"));
   if (!sim800h.expect_scan(F("+CBC: %d,%d,%d"), &bat_status, &bat_percent, &bat_voltage)) {
-    Serial.println("BAT lookup failed");
+    Serial.println(F("BAT lookup failed"));
     bat_percent = 0;
   }
   return sim800h.expect_OK();
@@ -94,7 +111,7 @@ void GetRGB() {
   // get battery status
   uint16_t bat_status = 0, bat_percent = 0, bat_voltage = 0;
   if (!getBatteryStatus(bat_status, bat_percent, bat_voltage)) {
-    Serial.println("BAT status failed");
+    Serial.println(F("BAT status failed"));
   }
 
   unsigned long response_length;
@@ -114,7 +131,7 @@ void GetRGB() {
   } else {
     // take into account the 0 at the end of strings
     char response_buffer[64] = {0};
-    size_t received_length = sim800h.HTTP_get_read(response_buffer, 0, (size_t) response_length);
+    size_t received_length = sim800h.HTTP_read(response_buffer, 0, (size_t) response_length);
     sim800h.disableGPRS();
     sim800h.shutdown();
 
