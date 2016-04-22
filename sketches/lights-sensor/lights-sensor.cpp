@@ -43,7 +43,6 @@ extern "C" {
 #define led 13
 #define trigger 6
 
-//SFE_ISL29125 RGB_sensor;
 UbirchSIM800 sim800h = UbirchSIM800();
 
 static int loop_counter = 1;
@@ -137,6 +136,8 @@ void SendGPS() {
   sprintf_P(payload + 15,
             PSTR("{\"r\":%3d,\"g\":%3d,\"b\":%3d,\"lat\":\"%s\",\"lon\":\"%s\",\"bat\":%3d,\"lps\":%d}"),
             red1, green1, blue1, lat, lon, bat_percent, loop_counter);
+
+  // free latitude and longitude
   free(lat);
   free(lon);
 
@@ -144,19 +145,21 @@ void SendGPS() {
   Serial.print(payload);
   Serial.println("'");
 
-  // create hashes from the payload structure as well as the IMEI (key)
+  // create hashes from the payload structure as well as the IMEI (key), sig buffer is used twice!
   sig = (char *) malloc(crypto_hash_BYTES);
 
   payload_hash = (char *) malloc(89);
   crypto_hash((unsigned char *) sig, (const unsigned char *) payload, strlen(payload));
-  Serial.println(base64_encode(payload_hash, sig, crypto_hash_BYTES));
+  base64_encode(payload_hash, sig, crypto_hash_BYTES);
 
   auth_hash = (char *) malloc(89);
   Serial.print(F("payload hash: "));
   Serial.println(payload_hash);
 
   crypto_hash((unsigned char *) sig, (const unsigned char *) payload, 15);
-  Serial.println(base64_encode(auth_hash, sig, crypto_hash_BYTES));
+  base64_encode(auth_hash, sig, crypto_hash_BYTES);
+
+  // free signature buffer
   free(sig);
 
   Serial.print(F("auth hash   : "));
@@ -164,14 +167,11 @@ void SendGPS() {
 
   // finally, compile the message
   message = (char *) malloc(300);
-  if (!message) {
-    Serial.println(F("OOM message"));
-    return;
-  }
   sprintf_P(message,
             PSTR("{\"v\":\"0.0.1\",\"a\":\"%s\",\"s\":\"%s\",\"p\":%s}"),
             auth_hash, payload_hash, payload + 15);
 
+  // free payload and hashes
   free(payload);
   free(payload_hash);
   free(auth_hash);
@@ -185,25 +185,28 @@ void SendGPS() {
   unsigned long response_length;
   unsigned int http_status;
   http_status = sim800h.HTTP_post(PUSH_URL, response_length, message, strlen(message));
+  // free message after it's been sent
+  free(message);
+
   if (http_status != 200) {
     Serial.println(F("HTTP POST failed"));
     Serial.println(http_status);
     Serial.println(response_length);
+  } else {
+    if (response_length < 300) {
+      Serial.println(F("== RESPONSE =="));
+      //
+      char *response = (char *) malloc((size_t) response_length);
+      sim800h.HTTP_read(response, 9, (size_t) response_length);
+      Serial.println(response);
+      Serial.println("== END ==");
+      // free the response buffer
+      free(response);
+    } else {
+      Serial.print("HTTP RESPONSE too long: ");
+      Serial.println(response_length);
+    }
   }
-  free(message);
-
-  Serial.println(F("== RESPONSE =="));
-  char *buffer = (char *) malloc(32);
-  uint32_t pos = 0;
-  do {
-    size_t r = sim800h.HTTP_read(buffer, pos, 32);
-    pos += r;
-    Serial.write(buffer, r);
-  } while (pos < response_length);
-  free(buffer);
-  Serial.println();
-  Serial.println("== END ==");
-
   sim800h.shutdown();
 }
 
