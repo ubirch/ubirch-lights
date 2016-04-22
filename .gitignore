@@ -1,9 +1,9 @@
 # config.h is used for local configurations that should not be published
 config.h
 .idea/
+sketches/libraries/avrnacl-20140813/*/test
+sketches/libraries/avrnacl-20140813/*/obj
 sketches/libraries/Adafruit_NeoPixel
 sketches/libraries/arduino-base64
 sketches/libraries/jsmn
 build/
-sketches/libraries/avrnacl-20140813/*/test
-sketches/libraries/avrnacl-20140813/*/obj
