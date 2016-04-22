@@ -1,10 +1,12 @@
 add_executable_avr(lights-sensor lights-sensor.cpp)
+add_dependencies(lights-sensor compile-nacl)
 target_link_libraries(lights-sensor arduino-core SoftwareSerial nacl)
 
 # special external dependencies can be added like this and will be downloaded once
 # arguments: <target> <name> <git url>
 target_sketch_library(lights-sensor i2c "")
 target_sketch_library(lights-sensor isl29125 "")
+target_sketch_library(lights-sensor common "")
 target_sketch_library(lights-sensor ubirch-sim800 "git@github.com:ubirch/ubirch-sim800.git")
 target_sketch_library(lights-sensor arduino-base64 "https://github.com/adamvr/arduino-base64")
 

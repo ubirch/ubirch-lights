@@ -2,8 +2,8 @@
 config.h
 .idea/
 sketches/libraries/Adafruit_NeoPixel
-sketches/libraries/ISL29125_Breakout
 sketches/libraries/arduino-base64
-#sketches/libraries/ubirch-sim800
 sketches/libraries/jsmn
 build/
+sketches/libraries/avrnacl-20140813/*/test
+sketches/libraries/avrnacl-20140813/*/obj
