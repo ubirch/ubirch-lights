@@ -18,6 +18,11 @@ function init() {
 
 }
 
+function compile() {
+    # this files helps bundling the build commands
+
+    mkdir -p build && cd build && cmake .. && make
+}
 
 function build_software() {
   mkdir -p build;
@@ -34,8 +39,7 @@ case "$1" in
         build_software
         ;;
     *)
-        echo "Usage: $0 {build|publish}"
-        exit 1
+        compile
 esac
 
 exit 0
