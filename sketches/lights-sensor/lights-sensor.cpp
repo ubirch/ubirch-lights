@@ -138,8 +138,10 @@ void process_response(const char *response) {
                 index++;
                 Serial.print(F("Sensitivity: "));
                 if (*(response + token[index].start) - '0') {
+                  Serial.println("10K lux");
                   rgb_config = ISL_MODE_10KLUX;
                 } else {
+                  Serial.println("375 lux");
                   rgb_config = ISL_MODE_375LUX;
                 }
                 expected_tokens--;
