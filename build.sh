@@ -17,16 +17,30 @@ function init() {
 
 
 }
+function fix_git_user() {
+  git config --system user.name Docker && git config --system user.email docker@localhost
+  ERROR_CODE=$?
+  if [ ${ERROR_CODE} -ne 0 ]; then
 
+      echo "Setting Git user failed"
+      exit ${ERROR_CODE}
+  fi
+}
 function compile() {
     # this files helps bundling the build commands
-
+    fix_git_user
     mkdir -p build && cd build && cmake .. && make
+    ERROR_CODE=$?
+    if [ ${ERROR_CODE} -ne 0 ]; then
+
+        echo "Compilation failed"
+        exit ${ERROR_CODE}
+    fi
 }
 
 function build_software() {
   mkdir -p build;
-  docker run --rm --user `id -u`:`id -g` -v $PWD:/build --entrypoint /build/build.sh ubirch/avr-build:${MAVEN_CONTAINER_VERSION}
+  docker run --rm --user `id -u`:`id -g` -v $PWD:/build --entrypoint /build/build.sh ubirch/avr-build:${AVR_CONTAINER_VERSION}
   if [ $? -ne 0 ]; then
       echo "Docker build failed"
       exit 1
