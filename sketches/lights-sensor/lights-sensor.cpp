@@ -96,7 +96,7 @@ void process_response(const char *response) {
     if (token[index].type == JSMN_OBJECT) {
       while (index++ < token_count) {
         char sig[crypto_hash_BYTES];
-        if (jsoneq(response, &token[index], "v") == 0) {
+        if (jsoneq(response, &token[index], "v") == 0 && token[index+1].type == JSMN_STRING) {
           Serial.print(F("protocol version: "));
           print_token(response, token[++index]);
         } else if (jsoneq(response, &token[index], "s") == 0) {
@@ -104,7 +104,7 @@ void process_response(const char *response) {
           print_token(response, token[++index]);
           base64_decode(sig, (char *) (response + token[index].start), token[index].end - token[index].start);
 
-          print_hash(sig);
+          /*print_hash(sig);*/
 
         } else if (jsoneq(response, &token[index], "p") == 0 && token[index + 1].type == JSMN_OBJECT) {
           Serial.print(F("payload: "));
@@ -118,12 +118,10 @@ void process_response(const char *response) {
           strncpy(payload + 15, response + token[index].start, payload_length);
           payload[15 + payload_length] = '\0';
 
-          Serial.println(payload);
-
           crypto_hash_sha512((unsigned char *) payload_hash, (const unsigned char *) payload, strlen(payload));
           bool signature_verified = !memcmp(sig, payload_hash, crypto_hash_BYTES);
 
-          print_hash(payload_hash);
+          /*print_hash(payload_hash);*/
 
           // free the payload and its hash
           free(payload);
