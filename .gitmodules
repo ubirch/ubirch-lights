@@ -1,3 +1,6 @@
 [submodule "cmake"]
 	path = cmake
 	url = git@github.com:ubirch/avr-arduino-cmake.git
+[submodule "sketches/libraries/ubirch-sim800"]
+	path = sketches/libraries/ubirch-sim800
+	url = git@github.com:ubirch/ubirch-sim800.git
