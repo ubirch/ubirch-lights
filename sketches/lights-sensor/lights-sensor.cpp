@@ -103,8 +103,8 @@ void process_response(const char *response) {
         char sig[crypto_hash_BYTES];
 
         if (jsoneq(response, token[index], "v") == 0 && token[index + 1].type == JSMN_STRING) {
-          if (!jsoneq(response, token[index + 1], "0.0.1")) {
-            Serial.println(F("protocol version mismatch: "));
+          if (strncmp_P(response + token[index + 1].start, PSTR("0.0"), 3) != 0) {
+            Serial.print(F("protocol version mismatch: "));
             print_token(response, token[index + 1]);
 
             // do not continue if the version does not match
