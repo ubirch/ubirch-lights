@@ -41,8 +41,8 @@ extern "C" {
 #define PIXEL_PIN 10
 #define PIXEL_COUNT 1
 
-#define led 13
-#define trigger 6
+#define LED 13
+#define WATCHDOG 6
 
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(PIXEL_COUNT, PIXEL_PIN, PIXEL_TYPE);
 UbirchSIM800 sim800h = UbirchSIM800();
@@ -51,11 +51,11 @@ int loop_counter = 1; //loop counter
 void setup() {
   Serial.begin(BAUD);
 
-  pinMode(led, OUTPUT);
-  pinMode(trigger, INPUT);
-  digitalWrite(led, HIGH);
+  pinMode(LED, OUTPUT);
+  pinMode(WATCHDOG, INPUT);
+  digitalWrite(LED, HIGH);
   delay(100);
-  digitalWrite(led, LOW);
+  digitalWrite(LED, LOW);
   delay(100);
 
   // edit APN settings in config.h
@@ -160,13 +160,13 @@ void GetRGB() {
 }
 
 void loop() {
-  digitalWrite(led, HIGH);
-  pinMode(trigger, INPUT);
+  digitalWrite(LED, HIGH);
+  pinMode(WATCHDOG, INPUT);
 
   GetRGB();
 
-  pinMode(trigger, OUTPUT);
-  digitalWrite(led, LOW);
+  pinMode(WATCHDOG, OUTPUT);
+  digitalWrite(LED, LOW);
   loop_counter++;
 
   sleepabit(SLEEP_CYCLES);

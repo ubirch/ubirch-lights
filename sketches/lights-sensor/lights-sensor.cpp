@@ -41,37 +41,35 @@ extern "C" {
 // default wakup interval in seconds
 #define DEFAULT_INTERVAL 5*60
 
-#define led 13
-#define trigger 6
+#define LED 13
+#define WATCHDOG 6
 
 UbirchSIM800 sim800h = UbirchSIM800();
 
+// this counts up as long as we don't have a reset
 static int loop_counter = 1;
 
+// internal sensor state
 static uint16_t interval = DEFAULT_INTERVAL;
 static uint8_t rgb_config = ISL_MODE_375LUX;
 static uint8_t rgb_ir_filter = ISL_FILTER_IR_NONE + 0x20;
 
-static int jsoneq(const char *json, jsmntok_t *token, const char *key) {
-  if (token->type == JSMN_STRING &&
-      strlen(key) == (size_t) (token->end - token->start) &&
-      strncmp(json + token->start, key, (size_t) (token->end - token->start)) == 0) {
+static int jsoneq(const char *json, jsmntok_t &token, const char *key) {
+  if (token.type == JSMN_STRING &&
+      strlen(key) == (size_t) (token.end - token.start) &&
+      strncmp(json + token.start, key, (size_t) (token.end - token.start)) == 0) {
     return 0;
   }
   return -1;
 }
 
+// JSMN helper function to print the current token for debugging
 static inline void print_token(const char *response, jsmntok_t &token) {
   Serial.write(response + token.start, (size_t) (token.end - token.start));
   Serial.println();
 }
 
-static inline void print_hash(char *sig) {
-  Serial.print(F("[HASH] "));
-  for (uint8_t i = 0; i < crypto_hash_BYTES; i++) Serial.print((unsigned char) sig[i], 16);
-  Serial.println();
-}
-
+// convert a number of characters into an unsigned integer value
 unsigned int to_uint(const char *ptr, size_t len) {
   unsigned int ret = 0;
   for (uint8_t i = 0; i < len; i++) {
@@ -80,6 +78,7 @@ unsigned int to_uint(const char *ptr, size_t len) {
   return ret;
 }
 
+// process the response (JSON)
 void process_response(const char *response) {
   jsmntok_t *token;
   jsmn_parser parser;
@@ -96,17 +95,21 @@ void process_response(const char *response) {
     if (token[index].type == JSMN_OBJECT) {
       while (index++ < token_count) {
         char sig[crypto_hash_BYTES];
-        if (jsoneq(response, &token[index], "v") == 0 && token[index+1].type == JSMN_STRING) {
-          Serial.print(F("protocol version: "));
-          print_token(response, token[++index]);
-        } else if (jsoneq(response, &token[index], "s") == 0) {
+
+        if (jsoneq(response, token[index], "v") == 0 && token[index + 1].type == JSMN_STRING) {
+          if (!jsoneq(response, token[index + 1], "0.0.1")) {
+            Serial.println(F("protocol version mismatch: "));
+            print_token(response, token[index + 1]);
+
+            // do not continue if the version does not match
+            break;
+          }
+        } else if (jsoneq(response, token[index], "s") == 0 && token[index+1].type == JSMN_STRING) {
           Serial.print(F("signature: "));
           print_token(response, token[++index]);
+          // decode signature and store in sig
           base64_decode(sig, (char *) (response + token[index].start), token[index].end - token[index].start);
-
-          /*print_hash(sig);*/
-
-        } else if (jsoneq(response, &token[index], "p") == 0 && token[index + 1].type == JSMN_OBJECT) {
+        } else if (jsoneq(response, token[index], "p") == 0 && token[index + 1].type == JSMN_OBJECT) {
           Serial.print(F("payload: "));
           print_token(response, token[++index]);
 
@@ -118,10 +121,9 @@ void process_response(const char *response) {
           strncpy(payload + 15, response + token[index].start, payload_length);
           payload[15 + payload_length] = '\0';
 
+          // hash payload and check whether it matches the signature hash
           crypto_hash_sha512((unsigned char *) payload_hash, (const unsigned char *) payload, strlen(payload));
           bool signature_verified = !memcmp(sig, payload_hash, crypto_hash_BYTES);
-
-          /*print_hash(payload_hash);*/
 
           // free the payload and its hash
           free(payload);
@@ -132,7 +134,7 @@ void process_response(const char *response) {
             Serial.println(F("Signature verified: OK"));
             uint8_t expected_tokens = 3;
             while (expected_tokens && index++ < token_count) {
-              if (jsoneq(response, &token[index], "s") == 0 && token[index + 1].type == JSMN_PRIMITIVE) {
+              if (jsoneq(response, token[index], "s") == 0 && token[index + 1].type == JSMN_PRIMITIVE) {
                 index++;
                 Serial.print(F("Sensitivity: "));
                 if (*(response + token[index].start) - '0') {
@@ -143,13 +145,13 @@ void process_response(const char *response) {
                   rgb_config = ISL_MODE_375LUX;
                 }
                 expected_tokens--;
-              } else if (jsoneq(response, &token[index], "ir") == 0 && token[index + 1].type == JSMN_PRIMITIVE) {
+              } else if (jsoneq(response, token[index], "ir") == 0 && token[index + 1].type == JSMN_PRIMITIVE) {
                 index++;
                 Serial.print(F("Infrared filter: 0x"));
                 rgb_ir_filter = to_uint(response + token[index].start, (size_t) token[index].end - token[index].start);
                 Serial.println(rgb_ir_filter, 16);
                 expected_tokens--;
-              } else if (jsoneq(response, &token[index], "i") == 0 && token[index + 1].type == JSMN_PRIMITIVE) {
+              } else if (jsoneq(response, token[index], "i") == 0 && token[index + 1].type == JSMN_PRIMITIVE) {
                 index++;
                 Serial.print(F("Interval: "));
                 interval = to_uint(response + token[index].start, (size_t) token[index].end - token[index].start);
@@ -168,7 +170,7 @@ void process_response(const char *response) {
   free(token);
 }
 
-void getRGB(uint8_t &red, uint8_t &green, uint8_t &blue) {
+void sample_rgb(uint8_t &red, uint8_t &green, uint8_t &blue) {
   i2c_init(I2C_SPEED_400KHZ);
 
   isl_reset();
@@ -182,8 +184,8 @@ void getRGB(uint8_t &red, uint8_t &green, uint8_t &blue) {
     green = isl_read_green8();
     blue = isl_read_blue8();
   }
-  Serial.println(F("RGB conversion done."));
 
+  Serial.print(F("RGB: "));
   Serial.print(red);
   Serial.print(F(":"));
   Serial.print(green);
@@ -191,51 +193,53 @@ void getRGB(uint8_t &red, uint8_t &green, uint8_t &blue) {
   Serial.println(blue);
 }
 
-void SendGPS() {
-  uint8_t red1 = 0, green1 = 0, blue1 = 0;
+void send_sensor_data() {
+  uint8_t red = 0, green = 0, blue = 0;
   uint16_t bat_status = 0, bat_percent = 0, bat_voltage = 0;
-  char *lat = NULL, *lon = NULL;
+  char *lat = NULL, *lon = NULL, *date = NULL, *time = NULL;
   char *payload, *payload_hash, *auth_hash;
   char *sig, *message;
 
-  getRGB(red1, green1, blue1);
-
-  // wake up the SIM800 and start GPRS
-  if (!sim800h.wakeup()) return;
-  if (!sim800h.registerNetwork(60000)) return;
-  if (!sim800h.enableGPRS()) return;
+  // sample light data
+  sample_rgb(red, green, blue);
 
   // read battery status
-  if (!sim800h.battery(bat_status, bat_percent, bat_voltage)) {
-    Serial.println(F("BAT status failed"));
-  }
-
+  sim800h.battery(bat_status, bat_percent, bat_voltage);
   // read GSM approx. location
-  sim800h.location(lat, lon);
+  if (sim800h.location(lat, lon, date, time)) {
+    Serial.print(F(">>> "));
+    Serial.print(date);
+    Serial.print(F(" "));
+    Serial.println(time);
+  }
 
   // read device IMEI, which is our key
   payload = (char *) malloc(128);
-  if (!sim800h.IMEI(payload)) {
+  if (sim800h.IMEI(payload)) {
+    Serial.print(F("authorization: "));
+    Serial.println(payload);
+  } else {
     Serial.println(F("IMEI not found, can't send"));
     free(payload);
     free(lat);
     free(lon);
+    free(date);
+    free(time);
     return;
-  };
+  }
+
 
   // hashed payload structure IMEI{DATA}
   // Example: '123456789012345{"r":44,"g":33,"b":22,"lat":"12.475886","lon":"51.505264","bat":100,"lps":99999}'
   sprintf_P(payload + 15,
             PSTR("{\"r\":%3d,\"g\":%3d,\"b\":%3d,\"lat\":\"%s\",\"lon\":\"%s\",\"bat\":%3d,\"lps\":%d}"),
-            red1, green1, blue1, lat == NULL ? "" : lat, lon == NULL ? "" : lon, bat_percent, loop_counter);
+            red, green, blue, lat == NULL ? "" : lat, lon == NULL ? "" : lon, bat_percent, loop_counter);
 
   // free latitude and longitude
   free(lat);
   free(lon);
-
-  Serial.print("payload: '");
-  Serial.print(payload);
-  Serial.println("'");
+  free(date);
+  free(time);
 
   // create hashes from the payload structure as well as the IMEI (key), sig buffer is used twice!
   sig = (char *) malloc(crypto_hash_BYTES);
@@ -310,42 +314,44 @@ void SendGPS() {
     }
 
   }
-  char date[9], time[9], tz[4];
-  sim800h.time(date, time, tz);
-  Serial.print(date);
-  Serial.print(" ");
-  Serial.print(time);
-  Serial.println(tz);
-
-  sim800h.shutdown();
-  delay(100);
 }
 
 
 void setup() {
   Serial.begin(115200);
-  Serial.println("WELCOME!");
+  Serial.println();
 
-  pinMode(led, OUTPUT);
-  pinMode(trigger, INPUT);
+  pinMode(LED, OUTPUT);
+  pinMode(WATCHDOG, INPUT);
 
-  digitalWrite(led, HIGH);
-  delay(500);
-  digitalWrite(led, LOW);
-  delay(500);
+  digitalWrite(LED, HIGH);
+  delay(100);
+  digitalWrite(LED, LOW);
 
   // edit APN settings in config.h
   sim800h.setAPN(F(FONA_APN), F(FONA_USER), F(FONA_PASS));
 }
 
 void loop() {
-  digitalWrite(led, HIGH);
-  pinMode(trigger, INPUT);
+  digitalWrite(LED, HIGH);
+  pinMode(WATCHDOG, INPUT);
 
-  SendGPS();
+  // wake up the SIM800
+  if (sim800h.wakeup()) {
+    // try to connect and enable GPRS, send if successful
+    for (uint8_t tries = 2; tries > 0; tries--) {
+      if (sim800h.registerNetwork(60000) && sim800h.enableGPRS()) {
+        send_sensor_data();
+        break;
+      }
+      Serial.println();
+      Serial.println(F("mobile network failed"));
+    }
+  }
+  sim800h.shutdown();
 
-  pinMode(trigger, OUTPUT);
-  digitalWrite(led, LOW);
+  pinMode(WATCHDOG, OUTPUT);
+  digitalWrite(LED, LOW);
   loop_counter++;
   Serial.print(F("sleeping for "));
   Serial.print(interval);
