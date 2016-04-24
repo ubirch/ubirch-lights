@@ -1,4 +1,4 @@
-# ubirch lights, a sensor installation of light color
+# ubirch lights, a sensory installation of light color
 
 It is the code that runs the [re:publica 2015 FEWL installation](https://www.facebook.com/findingeuropewithlights/). The
 code runs on our own first generation boards insight hand made lamps as well as special RGB sensors

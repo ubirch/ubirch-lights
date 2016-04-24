@@ -78,7 +78,13 @@ unsigned int to_uint(const char *ptr, size_t len) {
   return ret;
 }
 
-// process the response (JSON)
+/*!
+ * Process the JSON response from the backend. It should contain configuration
+ * parameters that need to be set. The response must be signed and will be
+ * checked for signature match and protocol version.
+ *
+ * @param response the string response
+ */
 void process_response(const char *response) {
   jsmntok_t *token;
   jsmn_parser parser;
@@ -170,6 +176,13 @@ void process_response(const char *response) {
   free(token);
 }
 
+/*!
+ * Sample light data via the external RGB sensor.
+ *
+ * @param red part - passed by reference
+ * @param green part - passed by reference
+ * @param blue part - passed by reference
+ */
 void sample_rgb(uint8_t &red, uint8_t &green, uint8_t &blue) {
   i2c_init(I2C_SPEED_400KHZ);
 
@@ -193,6 +206,10 @@ void sample_rgb(uint8_t &red, uint8_t &green, uint8_t &blue) {
   Serial.println(blue);
 }
 
+/*!
+ * Send samples sensor data to the backend. The payload message will be signed
+ * using a board specific key.
+ */
 void send_sensor_data() {
   uint8_t red = 0, green = 0, blue = 0;
   uint16_t bat_status = 0, bat_percent = 0, bat_voltage = 0;
@@ -227,7 +244,6 @@ void send_sensor_data() {
     free(time);
     return;
   }
-
 
   // hashed payload structure IMEI{DATA}
   // Example: '123456789012345{"r":44,"g":33,"b":22,"lat":"12.475886","lon":"51.505264","bat":100,"lps":99999}'
@@ -316,7 +332,9 @@ void send_sensor_data() {
   }
 }
 
-
+/*!
+ * Initial setup.
+ */
 void setup() {
   Serial.begin(115200);
   Serial.println();
@@ -332,6 +350,11 @@ void setup() {
   sim800h.setAPN(F(FONA_APN), F(FONA_USER), F(FONA_PASS));
 }
 
+/*!
+ * Main loop. Initialized the mobile network initiates the
+ * RGB data sending. Will sleep a set amount of seconds before
+ * it finishes.
+ */
 void loop() {
   digitalWrite(LED, HIGH);
   pinMode(WATCHDOG, INPUT);
@@ -353,10 +376,12 @@ void loop() {
   pinMode(WATCHDOG, OUTPUT);
   digitalWrite(LED, LOW);
   loop_counter++;
+
   Serial.print(F("sleeping for "));
   Serial.print(interval);
   Serial.println(F("s"));
   delay(100);
 
+  // sleep interval seconds (put MCU in low power mode)
   sleep(interval);
 }
