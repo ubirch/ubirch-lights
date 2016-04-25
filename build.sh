@@ -28,7 +28,7 @@ function fix_git_user() {
 }
 function compile() {
     # this files helps bundling the build commands
-    fix_git_user
+    # fix_git_user
     mkdir -p build && cd build && cmake .. && make
     ERROR_CODE=$?
     if [ ${ERROR_CODE} -ne 0 ]; then
