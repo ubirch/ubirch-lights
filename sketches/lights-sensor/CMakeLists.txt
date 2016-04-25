@@ -9,6 +9,7 @@ target_sketch_library(lights-sensor isl29125 "")
 target_sketch_library(lights-sensor common "")
 target_sketch_library(lights-sensor ubirch-sim800 "git@github.com:ubirch/ubirch-sim800.git")
 target_sketch_library(lights-sensor arduino-base64 "https://github.com/adamvr/arduino-base64")
+target_sketch_library(lights-sensor jsmn https://github.com/zserge/jsmn)
 
 # copy the config.h.template to config.h in case it is not there; it is ignored by .git!
 if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/config.h")

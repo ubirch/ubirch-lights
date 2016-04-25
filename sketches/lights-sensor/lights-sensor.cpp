@@ -44,6 +44,16 @@ extern "C" {
 #define LED 13
 #define WATCHDOG 6
 
+// protocol version check
+#define PROTOCOL_VERSION_MIN "0.0"
+// json keys
+#define P_SIGNATURE "s"
+#define P_VERSION "v"
+#define P_PAYLOAD "p"
+#define P_SENSITIVITY "s"
+#define P_IR_FILTER "ir"
+#define P_INTERVAL "i"
+
 UbirchSIM800 sim800h = UbirchSIM800();
 
 // this counts up as long as we don't have a reset
@@ -94,30 +104,34 @@ void process_response(const char *response) {
   const uint8_t token_count = (const uint8_t) jsmn_parse(&parser, response, strlen(response), NULL, 0);
   token = (jsmntok_t *) malloc(sizeof(*token) * token_count);
 
+  // TODO check token count and return if too many
+
   // reset parser, parse and store tokens
   jsmn_init(&parser);
-  if (jsmn_parse(&parser, response, strlen(response), token, token_count) == token_count && token_count < 15) {
+  if (jsmn_parse(&parser, response, strlen(response), token, token_count) == token_count) {
     uint8_t index = 0;
-    if (token[index].type == JSMN_OBJECT) {
-      while (index++ < token_count) {
+    if (token[0].type == JSMN_OBJECT) {
+      while(++index < token_count) {
         char sig[crypto_hash_BYTES];
 
-        if (jsoneq(response, token[index], "v") == 0 && token[index + 1].type == JSMN_STRING) {
-          if (strncmp_P(response + token[index + 1].start, PSTR("0.0"), 3) != 0) {
+        if (jsoneq(response, token[index], P_VERSION) == 0 && token[index + 1].type == JSMN_STRING) {
+          index++;
+          if (strncmp_P(response + token[index].start, PSTR(PROTOCOL_VERSION_MIN), 3) != 0) {
             Serial.print(F("protocol version mismatch: "));
-            print_token(response, token[index + 1]);
-
+            print_token(response, token[index]);
             // do not continue if the version does not match
             break;
           }
-        } else if (jsoneq(response, token[index], "s") == 0 && token[index+1].type == JSMN_STRING) {
+        } else if (jsoneq(response, token[index], P_SIGNATURE) == 0 && token[index + 1].type == JSMN_STRING) {
+          index++;
           Serial.print(F("signature: "));
-          print_token(response, token[++index]);
+          print_token(response, token[index]);
           // decode signature and store in sig
           base64_decode(sig, (char *) (response + token[index].start), token[index].end - token[index].start);
-        } else if (jsoneq(response, token[index], "p") == 0 && token[index + 1].type == JSMN_OBJECT) {
+        } else if (jsoneq(response, token[index], P_PAYLOAD) == 0 && token[index + 1].type == JSMN_OBJECT) {
+          index++;
           Serial.print(F("payload: "));
-          print_token(response, token[++index]);
+          print_token(response, token[index]);
 
           // check signature
           uint8_t payload_length = (uint8_t) (token[index].end - token[index].start);
@@ -138,9 +152,10 @@ void process_response(const char *response) {
           // if the signature is verified, parse the contents
           if (signature_verified) {
             Serial.println(F("Signature verified: OK"));
-            uint8_t expected_tokens = 3;
-            while (expected_tokens && index++ < token_count) {
-              if (jsoneq(response, token[index], "s") == 0 && token[index + 1].type == JSMN_PRIMITIVE) {
+            // only loop through as many keys as there are in the payload
+            uint8_t pkeys = (uint8_t) token[index].size;
+            while(pkeys-- && ++index < token_count) {
+              if (jsoneq(response, token[index], P_SENSITIVITY) == 0 && token[index + 1].type == JSMN_PRIMITIVE) {
                 index++;
                 Serial.print(F("Sensitivity: "));
                 if (*(response + token[index].start) - '0') {
@@ -150,25 +165,31 @@ void process_response(const char *response) {
                   Serial.println("375 lux");
                   rgb_config = ISL_MODE_375LUX;
                 }
-                expected_tokens--;
-              } else if (jsoneq(response, token[index], "ir") == 0 && token[index + 1].type == JSMN_PRIMITIVE) {
+              } else if (jsoneq(response, token[index], P_IR_FILTER) == 0 && token[index + 1].type == JSMN_PRIMITIVE) {
                 index++;
                 Serial.print(F("Infrared filter: 0x"));
                 rgb_ir_filter = to_uint(response + token[index].start, (size_t) token[index].end - token[index].start);
                 Serial.println(rgb_ir_filter, 16);
-                expected_tokens--;
-              } else if (jsoneq(response, token[index], "i") == 0 && token[index + 1].type == JSMN_PRIMITIVE) {
+              } else if (jsoneq(response, token[index], P_INTERVAL) == 0 && token[index + 1].type == JSMN_PRIMITIVE) {
                 index++;
                 Serial.print(F("Interval: "));
                 interval = to_uint(response + token[index].start, (size_t) token[index].end - token[index].start);
                 Serial.print(interval);
-                Serial.println("s");
-                expected_tokens--;
+                Serial.println(F("s"));
+              } else {
+                Serial.print(F("unknown payload key: "));
+                print_token(response, token[index]);
+                index++;
               }
             }
           } else {
             Serial.println(F("Signature failed to verify!"));
+            break;
           }
+        } else {
+          Serial.print(F("unknown key: "));
+          print_token(response, token[index]);
+          index++;
         }
       }
     }
@@ -248,7 +269,7 @@ void send_sensor_data() {
   // hashed payload structure IMEI{DATA}
   // Example: '123456789012345{"r":44,"g":33,"b":22,"lat":"12.475886","lon":"51.505264","bat":100,"lps":99999}'
   sprintf_P(payload + 15,
-            PSTR("{\"r\":%3d,\"g\":%3d,\"b\":%3d,\"lat\":\"%s\",\"lon\":\"%s\",\"bat\":%3d,\"lps\":%d}"),
+            PSTR("{\"r\":%3d,\"g\":%3d,\"b\":%3d,\"la\":\"%s\",\"lo\":\"%s\",\"ba\":%3d,\"lp\":%d}"),
             red, green, blue, lat == NULL ? "" : lat, lon == NULL ? "" : lon, bat_percent, loop_counter);
 
   // free latitude and longitude
@@ -345,6 +366,7 @@ void setup() {
   digitalWrite(LED, HIGH);
   delay(100);
   digitalWrite(LED, LOW);
+  delay(100);
 
   // edit APN settings in config.h
   sim800h.setAPN(F(FONA_APN), F(FONA_USER), F(FONA_PASS));
