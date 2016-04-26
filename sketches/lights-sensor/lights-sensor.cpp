@@ -30,6 +30,7 @@
 #include <isl29125.h>
 #include <avrsleep.h>
 #include <freeram.h>
+#include <alloca.h>
 
 extern "C" {
 #include <avrnacl.h>
@@ -100,122 +101,62 @@ static inline void print_hash(char *sig) {
  * parameters that need to be set. The response must be signed and will be
  * checked for signature match and protocol version.
  *
- * @param response the string response
+ * @param response the request response, will be freed here
+ * @param payload the extracted payload, if signature is verified
  */
-void process_response(const char *response) {
+void process_response(char *response, char *&payload, char *&signature) {
+  char tmp_signature[crypto_hash_BYTES], *tmp_payload = NULL;
+
   jsmntok_t *token;
   jsmn_parser parser;
   jsmn_init(&parser);
-
-  Serial.print(F("SRAM: "));
-  Serial.println(query_free_sram());
 
   // identify the number of tokens in our response, we expect 13
   const uint8_t token_count = (const uint8_t) jsmn_parse(&parser, response, strlen(response), NULL, 0);
   token = (jsmntok_t *) malloc(sizeof(*token) * token_count);
 
-  Serial.print(F("SRAM: "));
-  Serial.println(query_free_sram());
-
   // TODO check token count and return if too many
 
   // reset parser, parse and store tokens
   jsmn_init(&parser);
-  if (jsmn_parse(&parser, response, strlen(response), token, token_count) == token_count) {
+  const int parsed_token_count = jsmn_parse(&parser, response, strlen(response), token, token_count);
+  if (parsed_token_count == token_count) {
     uint8_t index = 0;
     if (token[0].type == JSMN_OBJECT) {
       while (++index < token_count) {
-        char sig[crypto_hash_BYTES];
-
         if (jsoneq(response, token[index], P_VERSION) == 0 && token[index + 1].type == JSMN_STRING) {
           index++;
           if (strncmp_P(response + token[index].start, PSTR(PROTOCOL_VERSION_MIN), 3) != 0) {
             Serial.print(F("protocol version mismatch: "));
             print_token(response, token[index]);
-            // do not continue if the version does not match
+            // do not continue if the version does not match, free already copied payload or sig
             break;
           }
         } else if (jsoneq(response, token[index], P_SIGNATURE) == 0 && token[index + 1].type == JSMN_STRING) {
           index++;
           Serial.print(F("signature: "));
           print_token(response, token[index]);
-          // decode signature and store in sig
-          base64_decode(sig, (char *) (response + token[index].start), token[index].end - token[index].start);
-          print_hash(sig);
+
+          // extract signature and decode it
+          base64_decode(tmp_signature, (response + token[index].start), token[index].end - token[index].start);
+          print_hash(tmp_signature);
 
         } else if (jsoneq(response, token[index], P_PAYLOAD) == 0 && token[index + 1].type == JSMN_OBJECT) {
           index++;
           Serial.print(F("payload: "));
           print_token(response, token[index]);
 
-          // check signature
-          uint8_t payload_length = (uint8_t) (token[index].end - token[index].start);
-          // required ram for signature verification: (PAYLOAD + IMEI) + SHA512 + HASH SIZE
-          const int required_ram = (payload_length + 16) + 669 + crypto_hash_BYTES;
-          const int free_sram = query_free_sram();
-          Serial.print(F("SRAM: "));
-          Serial.println(free_sram);
-          Serial.print(F("SRAM required: "));
-          Serial.println(required_ram);
+          // extract payload from json
+          uint8_t tmp_payload_length = (uint8_t) (token[index].end - token[index].start);
+          // allocate the temporary payload on the stack, we will copy it to heap after freeing some space
+          tmp_payload = (char *) alloca((size_t) (16 + tmp_payload_length));
+          sim800h.IMEI(tmp_payload);
+          strncpy(tmp_payload + 15, response + token[index].start, tmp_payload_length);
+          tmp_payload[15 + tmp_payload_length] = '\0';
 
-          if(required_ram > free_sram) {
-            Serial.println(F("PAYLOAD too large, may crash..."));
-          }
-
-          char *payload = (char *) malloc((size_t) (16 + payload_length));
-          char *payload_hash = (char *) malloc(crypto_hash_BYTES);
-
-          sim800h.IMEI(payload);
-          strncpy(payload + 15, response + token[index].start, payload_length);
-          payload[15 + payload_length] = '\0';
-
-          // hash payload and check whether it matches the signature hash
-          crypto_hash_sha512((unsigned char *) payload_hash, (const unsigned char *) payload, strlen(payload));
-          bool signature_verified = !memcmp(sig, payload_hash, crypto_hash_BYTES);
-
-          // free the payload and its hash
-          free(payload);
-          free(payload_hash);
-
-          // if the signature is verified, parse the contents
-          if (signature_verified) {
-            Serial.println(F("Signature verified: OK"));
-            // only loop through as many keys as there are in the payload
-            uint8_t pkeys = (uint8_t) token[index].size;
-            while (pkeys-- && ++index < token_count) {
-              if (jsoneq(response, token[index], P_SENSITIVITY) == 0 && token[index + 1].type == JSMN_PRIMITIVE) {
-                index++;
-                Serial.print(F("Sensitivity: "));
-                if (*(response + token[index].start) - '0') {
-                  Serial.println("10K lux");
-                  sensitivity = ISL_MODE_10KLUX;
-                } else {
-                  Serial.println("375 lux");
-                  sensitivity = ISL_MODE_375LUX;
-                }
-              } else if (jsoneq(response, token[index], P_IR_FILTER) == 0 && token[index + 1].type == JSMN_PRIMITIVE) {
-                index++;
-                Serial.print(F("Infrared filter: 0x"));
-                infrared_filter = to_uint(response + token[index].start,
-                                          (size_t) token[index].end - token[index].start);
-                Serial.println(infrared_filter, 16);
-              } else if (jsoneq(response, token[index], P_INTERVAL) == 0 && token[index + 1].type == JSMN_PRIMITIVE) {
-                index++;
-                Serial.print(F("Interval: "));
-                interval = to_uint(response + token[index].start, (size_t) token[index].end - token[index].start);
-                Serial.print(interval);
-                Serial.println(F("s"));
-              } else {
-                Serial.print(F("unknown payload key: "));
-                print_token(response, token[index]);
-                index++;
-              }
-            }
-          } else {
-            Serial.println(F("Signature failed to verify!"));
-            break;
-          }
+          index += 2 * token[index].size;
         } else {
+          // simply ignore unknown keys
           Serial.print(F("unknown key: "));
           print_token(response, token[index]);
           index++;
@@ -223,6 +164,100 @@ void process_response(const char *response) {
       }
     }
   }
+
+  // free used heap, the token and the no longer used response
+  free(token);
+  free(response);
+
+  // copy the locally (stack) allocated payload and signature to heap
+  payload = strdup(tmp_payload);
+  signature = strdup(tmp_signature);
+}
+
+bool verify_payload(const char *payload, const char *signature) {
+  // don't even start if we get NULLs
+  if (payload == NULL || signature == NULL) return false;
+
+  // first verify the payload signature
+  // required ram for signature verification: (PAYLOAD + IMEI) + SHA512 + HASH SIZE
+  const int required_ram = (strlen(payload) + 1) + 669 + crypto_hash_BYTES;
+  const int free_sram = query_free_sram();
+
+  Serial.print(F("payload verification: "));
+  Serial.print(free_sram);
+  Serial.print(F(" byte free ("));
+  Serial.print(required_ram);
+  Serial.println(F(" byte required)"));
+
+  bool signature_verified = false;
+  if (required_ram < free_sram) {
+
+    // hash payload and check whether it matches the signature hash
+    char *payload_hash = (char *) malloc(crypto_hash_BYTES);
+
+    crypto_hash_sha512((unsigned char *) payload_hash, (const unsigned char *) payload, strlen(payload));
+    print_hash(payload_hash);
+
+    signature_verified = !memcmp(signature, payload_hash, crypto_hash_BYTES);
+
+    Serial.print(F("signature: "));
+    Serial.println(signature_verified);
+
+    // free the payload hash
+    free(payload_hash);
+  } else {
+    Serial.println(F("payload too large, may crash..."));
+  }
+
+  return signature_verified;
+}
+
+void process_payload(char *payload) {
+  jsmntok_t *token;
+  jsmn_parser parser;
+  jsmn_init(&parser);
+
+  // identify the number of tokens in our response, we expect 13
+  const uint8_t token_count = (const uint8_t) jsmn_parse(&parser, payload, strlen(payload), NULL, 0);
+  token = (jsmntok_t *) malloc(sizeof(*token) * token_count);
+
+  // reset parser, parse and store tokens
+  jsmn_init(&parser);
+  if (jsmn_parse(&parser, payload, strlen(payload), token, token_count) == token_count) {
+    uint8_t index = 0;
+    if (token[0].type == JSMN_OBJECT) {
+      while (++index < token_count) {
+        if (jsoneq(payload, token[index], P_SENSITIVITY) == 0 && token[index + 1].type == JSMN_PRIMITIVE) {
+          index++;
+          Serial.print(F("sensitivity: "));
+          if (*(payload + token[index].start) - '0') {
+            Serial.println("10K lux");
+            sensitivity = ISL_MODE_10KLUX;
+          } else {
+            Serial.println("375 lux");
+            sensitivity = ISL_MODE_375LUX;
+          }
+        } else if (jsoneq(payload, token[index], P_IR_FILTER) == 0 && token[index + 1].type == JSMN_PRIMITIVE) {
+          index++;
+          Serial.print(F("infrared filter: 0x"));
+          infrared_filter = to_uint(payload + token[index].start,
+                                    (size_t) token[index].end - token[index].start);
+          Serial.println(infrared_filter, 16);
+        } else if (jsoneq(payload, token[index], P_INTERVAL) == 0 && token[index + 1].type == JSMN_PRIMITIVE) {
+          index++;
+          Serial.print(F("Interval: "));
+          interval = to_uint(payload + token[index].start, (size_t) token[index].end - token[index].start);
+          Serial.print(interval);
+          Serial.println(F("s"));
+        } else {
+          Serial.print(F("unknown payload key: "));
+          print_token(payload, token[index]);
+          index++;
+        }
+      }
+    }
+  }
+
   free(token);
 }
 
@@ -262,7 +297,7 @@ void send_sensor_data() {
   uint16_t bat_status = 0, bat_percent = 0, bat_voltage = 0;
   char *lat = NULL, *lon = NULL, *date = NULL, *time = NULL;
   char *payload, *payload_hash, *auth_hash;
-  char *sig, *message;
+  char *signature, *message;
 
   // do an initial sampling
   sample_rgb(red, green, blue);
@@ -325,21 +360,22 @@ void send_sensor_data() {
   free(time);
 
   // create hashes from the payload structure as well as the IMEI (key), sig buffer is used twice!
-  sig = (char *) malloc(crypto_hash_BYTES);
+  signature = (char *) malloc(crypto_hash_BYTES);
 
   payload_hash = (char *) malloc(89);
-  crypto_hash((unsigned char *) sig, (const unsigned char *) payload, strlen(payload));
-  base64_encode(payload_hash, sig, crypto_hash_BYTES);
+  crypto_hash((unsigned char *) signature, (const unsigned char *) payload, strlen(payload));
+  base64_encode(payload_hash, signature, crypto_hash_BYTES);
 
   auth_hash = (char *) malloc(89);
   Serial.print(F("payload hash: "));
   Serial.println(payload_hash);
 
-  crypto_hash((unsigned char *) sig, (const unsigned char *) payload, 15);
-  base64_encode(auth_hash, sig, crypto_hash_BYTES);
+  crypto_hash((unsigned char *) signature, (const unsigned char *) payload, 15);
+  base64_encode(auth_hash, signature, crypto_hash_BYTES);
 
   // free signature buffer
-  free(sig);
+  free(signature);
+  signature = NULL;
 
   Serial.print(F("auth hash   : "));
   Serial.println(auth_hash);
@@ -352,6 +388,7 @@ void send_sensor_data() {
 
   // free payload and hashes
   free(payload);
+  payload = NULL;
   free(payload_hash);
   free(auth_hash);
 
@@ -386,16 +423,19 @@ void send_sensor_data() {
       Serial.print(response);
       Serial.println(F("'"));
 
-      // parse response json
-      process_response(response);
+      // process response, extract payload and signature
+      process_response(response, payload, signature);
+      // verify and process payload
+      if (verify_payload(payload, signature)) {
+        process_payload(payload + 15);
+      }
+      free(signature);
+      free(payload);
 
-      // free the response buffer
-      free(response);
     } else {
       Serial.print(F("HTTP RESPONSE too long: "));
       Serial.println(response_length);
     }
-
   }
 }
 
@@ -427,12 +467,20 @@ void loop() {
   digitalWrite(LED, HIGH);
   pinMode(WATCHDOG, INPUT);
 
+
   // wake up the SIM800
   if (sim800h.wakeup()) {
     // try to connect and enable GPRS, send if successful
     for (uint8_t tries = 2; tries > 0; tries--) {
       if (sim800h.registerNetwork(60000) && sim800h.enableGPRS()) {
+        Serial.print(query_free_sram());
+        Serial.println(F(" byte free"));
+
         send_sensor_data();
+
+        Serial.print(query_free_sram());
+        Serial.println(F(" byte free"));
+
         break;
       }
       Serial.println();
@@ -451,5 +499,5 @@ void loop() {
   delay(100);
 
   // sleep interval seconds (put MCU in low power mode)
-  sleep(interval);
+//  sleep(interval);
 }
