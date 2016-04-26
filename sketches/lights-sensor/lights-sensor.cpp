@@ -82,7 +82,7 @@ static inline void print_token(const char *response, jsmntok_t &token) {
 }
 
 // convert a number of characters into an unsigned integer value
-unsigned int to_uint(const char *ptr, size_t len) {
+static unsigned int to_uint(const char *ptr, size_t len) {
   unsigned int ret = 0;
   for (uint8_t i = 0; i < len; i++) {
     ret = (ret * 10) + (ptr[i] - '0');
@@ -90,6 +90,7 @@ unsigned int to_uint(const char *ptr, size_t len) {
   return ret;
 }
 
+// print a hex representation of the has byte array
 static inline void print_hash(char *sig) {
   Serial.print(F("[HASH] "));
   for (uint8_t i = 0; i < crypto_hash_BYTES; i++) Serial.print((unsigned char) sig[i], 16);
@@ -174,6 +175,13 @@ void process_response(char *response, char *&payload, char *&signature) {
   signature = strdup(tmp_signature);
 }
 
+/*!
+ * Verify payload using the given signature.
+ *
+ * @param payload the json payload to check (including prepended key!)
+ * @param signature the signature for verification
+ * @return true if the verification was successful
+ */
 bool verify_payload(const char *payload, const char *signature) {
   // don't even start if we get NULLs
   if (payload == NULL || signature == NULL) return false;
@@ -212,6 +220,10 @@ bool verify_payload(const char *payload, const char *signature) {
   return signature_verified;
 }
 
+/*!
+ * Process payload and set configuration parameters from it.
+ * @param payload the payload to use, should be checked
+ */
 void process_payload(char *payload) {
   jsmntok_t *token;
   jsmn_parser parser;
@@ -231,10 +243,10 @@ void process_payload(char *payload) {
           index++;
           Serial.print(F("sensitivity: "));
           if (*(payload + token[index].start) - '0') {
-            Serial.println("10K lux");
+            Serial.println(F("10K lux"));
             sensitivity = ISL_MODE_10KLUX;
           } else {
-            Serial.println("375 lux");
+            Serial.println(F("375 lux"));
             sensitivity = ISL_MODE_375LUX;
           }
         } else if (jsoneq(payload, token[index], P_IR_FILTER) == 0 && token[index + 1].type == JSMN_PRIMITIVE) {
@@ -274,7 +286,7 @@ void sample_rgb(uint16_t &red, uint16_t &green, uint16_t &blue) {
   if (!isl_reset())
     Serial.println(F("ISL29125 reset failed"));
   if (!isl_set(ISL_R_COLOR_MODE, sensitivity | ISL_MODE_16BIT | ISL_MODE_RGB))
-    Serial.println(F("ISL29125 irt config failed"));
+    Serial.println(F("ISL29125 ir config failed"));
   if (!isl_set(ISL_R_FILTERING, infrared_filter))
     Serial.println(F("ISL29125 set infrared filtering failed"));
 
@@ -394,7 +406,7 @@ void send_sensor_data() {
 
   Serial.print(F("message: '"));
   Serial.print(message);
-  Serial.println("'");
+  Serial.println(F("'"));
   Serial.println(strlen(message));
 
   // send the request
@@ -408,12 +420,14 @@ void send_sensor_data() {
   Serial.print(F(" ("));
   Serial.print(response_length);
   Serial.println(F(")"));
+
   if (http_status != 200) {
     Serial.println(F("HTTP POST failed"));
   } else {
     if (response_length < 300) {
       char *response = (char *) malloc((size_t) response_length + 1);
       response[response_length] = '\0';
+
       // we need to read the response in little chunks, else the
       // software serial will just return trash, omissions etc.
       uint32_t pos = 0;
