@@ -26,6 +26,10 @@
 #include <stdbool.h>
 #include <util/twi.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // define some sensible speed defaults
 #define I2C_SPEED_50KHZ                 ((((F_CPU /  50000UL) / 1) - 16) / 2)
 #define I2C_SPEED_100KHZ                ((((F_CPU / 100000UL) / 1) - 16) / 2)
@@ -85,5 +89,31 @@ void i2c_write(uint8_t b);
  * @param ack == true will acknowledge the read, which is necessary if we request more data
  */
 uint8_t i2c_read(bool ack);
+
+/**
+ * assert that a certain bus condition is true, if I2C_ASSERT_VERBOSE is set, it will print error
+ * messages, else it will just return 0
+ *
+ * @param the expected result
+ * @param message the message to display, or NULL
+ */
+#ifndef NDEBUG
+#  ifdef I2C_ASSERT_VERBOSE
+#    include <stdio.h>
+#    include <avr/pgmspace.h>
+#    define i2c_assert(expected, message) if(TWSR != expected) {\
+       printf_P(PSTR("i2c: status: 0x%02x (expected 0x%02x): %s\n"), TWSR, expected, message);\
+       return 0;\
+     }
+#else
+#  define i2c_assert(expected, message) if(TWSR != expected) return 0;
+#endif
+#else
+#  define i2c_assert(expected, message)
+#endif
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif //UBIRCH_I2C_H

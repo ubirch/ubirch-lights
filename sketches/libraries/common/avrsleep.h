@@ -2,6 +2,10 @@
 #include <avr/sleep.h>
 #include <avr/interrupt.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /**
  * Sleep a number of seconds. Puts the AVR MCU in low power mode.
  *
@@ -14,3 +18,7 @@
  * @param seconds the number of seconds to sleep
  */
 void sleep(unsigned int seconds);
+
+#ifdef __cplusplus
+}
+#endif

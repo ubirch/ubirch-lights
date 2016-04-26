@@ -96,7 +96,7 @@ unsigned int to_uint(const char *ptr, size_t len) {
 }
 
 void set_rgb_color(uint8_t r, uint8_t g, uint8_t b, bool blink) {
-  if (r != red || g != green || b != blue) {
+  if (r != red || g != green || b != blue || blink) {
     red = r;
     green = g;
     blue = b;
@@ -145,6 +145,13 @@ void set_rgb_color(uint8_t r, uint8_t g, uint8_t b, bool blink) {
 
 }
 
+static inline void print_hash(char *sig) {
+  Serial.print(F("[HASH] "));
+  for (uint8_t i = 0; i < crypto_hash_BYTES; i++) Serial.print((unsigned char) sig[i], 16);
+  Serial.println();
+}
+
+
 /*!
  * Process the JSON response from the backend. It should contain the RGB data and
  * parameters that need to be set. The response must be signed and will be
@@ -189,6 +196,7 @@ void process_response(const char *response) {
           print_token(response, token[index]);
           // decode signature and store in sig
           base64_decode(sig, (char *) (response + token[index].start), token[index].end - token[index].start);
+
         } else if (jsoneq(response, token[index], P_PAYLOAD) == 0 && token[index + 1].type == JSMN_OBJECT) {
           Serial.print(F("payload: "));
           print_token(response, token[++index]);
@@ -197,13 +205,14 @@ void process_response(const char *response) {
           uint8_t payload_length = (uint8_t) (token[index].end - token[index].start);
           char *payload = (char *) malloc((size_t) (15 + payload_length + 1));
           char *payload_hash = (char *) malloc(crypto_hash_BYTES);
-          strncpy(payload, "860719022172864", 15);
-//          sim800h.IMEI(payload);
+          sim800h.IMEI(payload);
           strncpy(payload + 15, response + token[index].start, payload_length);
           payload[15 + payload_length] = '\0';
 
           // hash payload and check whether it matches the signature hash
           crypto_hash_sha512((unsigned char *) payload_hash, (const unsigned char *) payload, strlen(payload));
+          print_hash(sig);
+          print_hash(payload_hash);
           bool signature_verified = !memcmp(sig, payload_hash, crypto_hash_BYTES);
 
           // free the payload and its hash
@@ -412,9 +421,11 @@ void loop() {
   // wake up the SIM800
   if (sim800h.wakeup()) {
 
-    const char *response = "{\"v\":\"0.0.1\",\"s\":\"N4BB4/7YbxZRc0J99v+mHoqkkld0zgGHzinEdTnPZwU2tkv4SQc8NVhe+qfbsfQLE7GDNRPSvUaXdMgGO1upgQ==\",\"p\":{\"bf\":0,\"i\":900,\"r\":22,\"g\":33,\"b\":44,\"la\":\"52\",\"lo\":\"13\",\"ba\":76,\"lp\":2343}}";
-    process_response(response);
-
+    const char *response = "{\"v\":\"0.0.1\",\"s\":\"BvyjGIUC99n4FNbmDf3JHbx9haJ3FR+L4ZKAJxSRdZd4JdoyIvUj/JLW5NgKw2UKjQ+MTVpnyB+GaGebo3yckA==\",\"p\":{\"s\":0,\"bf\":0,\"ir\":20,\"i\":900,\"r\":1,\"g\":2,\"b\":1}}";
+    while(1) {
+      process_response(response);
+      delay(5000);
+    }
 //    // try to connect and enable GPRS, send if successful
 //    for (uint8_t tries = 2; tries > 0; tries--) {
 //      if (sim800h.registerNetwork(60000) && sim800h.enableGPRS()) {

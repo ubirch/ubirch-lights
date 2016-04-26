@@ -26,12 +26,13 @@
 #include <UbirchSIM800.h>
 #include <Base64.h>
 #include <jsmn.h>
-
-extern "C" {
 #include <i2c.h>
 #include <isl29125.h>
-#include <avrnacl.h>
 #include <avrsleep.h>
+#include <freeram.h>
+
+extern "C" {
+#include <avrnacl.h>
 }
 
 #ifndef BAUD
@@ -57,12 +58,12 @@ extern "C" {
 UbirchSIM800 sim800h = UbirchSIM800();
 
 // this counts up as long as we don't have a reset
-static int loop_counter = 1;
+static uint16_t loop_counter = 1;
 
 // internal sensor state
 static uint16_t interval = DEFAULT_INTERVAL;
-static uint8_t rgb_config = ISL_MODE_375LUX;
-static uint8_t rgb_ir_filter = ISL_FILTER_IR_NONE + 0x20;
+static uint8_t sensitivity = ISL_MODE_375LUX;
+static uint8_t infrared_filter = ISL_FILTER_IR_MAX;
 
 static int jsoneq(const char *json, jsmntok_t &token, const char *key) {
   if (token.type == JSMN_STRING &&
@@ -88,6 +89,12 @@ unsigned int to_uint(const char *ptr, size_t len) {
   return ret;
 }
 
+static inline void print_hash(char *sig) {
+  Serial.print(F("[HASH] "));
+  for (uint8_t i = 0; i < crypto_hash_BYTES; i++) Serial.print((unsigned char) sig[i], 16);
+  Serial.println();
+}
+
 /*!
  * Process the JSON response from the backend. It should contain configuration
  * parameters that need to be set. The response must be signed and will be
@@ -100,9 +107,15 @@ void process_response(const char *response) {
   jsmn_parser parser;
   jsmn_init(&parser);
 
+  Serial.print(F("SRAM: "));
+  Serial.println(query_free_sram());
+
   // identify the number of tokens in our response, we expect 13
   const uint8_t token_count = (const uint8_t) jsmn_parse(&parser, response, strlen(response), NULL, 0);
   token = (jsmntok_t *) malloc(sizeof(*token) * token_count);
+
+  Serial.print(F("SRAM: "));
+  Serial.println(query_free_sram());
 
   // TODO check token count and return if too many
 
@@ -111,7 +124,7 @@ void process_response(const char *response) {
   if (jsmn_parse(&parser, response, strlen(response), token, token_count) == token_count) {
     uint8_t index = 0;
     if (token[0].type == JSMN_OBJECT) {
-      while(++index < token_count) {
+      while (++index < token_count) {
         char sig[crypto_hash_BYTES];
 
         if (jsoneq(response, token[index], P_VERSION) == 0 && token[index + 1].type == JSMN_STRING) {
@@ -128,6 +141,8 @@ void process_response(const char *response) {
           print_token(response, token[index]);
           // decode signature and store in sig
           base64_decode(sig, (char *) (response + token[index].start), token[index].end - token[index].start);
+          print_hash(sig);
+
         } else if (jsoneq(response, token[index], P_PAYLOAD) == 0 && token[index + 1].type == JSMN_OBJECT) {
           index++;
           Serial.print(F("payload: "));
@@ -135,8 +150,21 @@ void process_response(const char *response) {
 
           // check signature
           uint8_t payload_length = (uint8_t) (token[index].end - token[index].start);
-          char *payload = (char *) malloc((size_t) (15 + payload_length + 1));
+          // required ram for signature verification: (PAYLOAD + IMEI) + SHA512 + HASH SIZE
+          const int required_ram = (payload_length + 16) + 669 + crypto_hash_BYTES;
+          const int free_sram = query_free_sram();
+          Serial.print(F("SRAM: "));
+          Serial.println(free_sram);
+          Serial.print(F("SRAM required: "));
+          Serial.println(required_ram);
+
+          if(required_ram > free_sram) {
+            Serial.println(F("PAYLOAD too large, may crash..."));
+          }
+
+          char *payload = (char *) malloc((size_t) (16 + payload_length));
           char *payload_hash = (char *) malloc(crypto_hash_BYTES);
+
           sim800h.IMEI(payload);
           strncpy(payload + 15, response + token[index].start, payload_length);
           payload[15 + payload_length] = '\0';
@@ -154,22 +182,23 @@ void process_response(const char *response) {
             Serial.println(F("Signature verified: OK"));
             // only loop through as many keys as there are in the payload
             uint8_t pkeys = (uint8_t) token[index].size;
-            while(pkeys-- && ++index < token_count) {
+            while (pkeys-- && ++index < token_count) {
               if (jsoneq(response, token[index], P_SENSITIVITY) == 0 && token[index + 1].type == JSMN_PRIMITIVE) {
                 index++;
                 Serial.print(F("Sensitivity: "));
                 if (*(response + token[index].start) - '0') {
                   Serial.println("10K lux");
-                  rgb_config = ISL_MODE_10KLUX;
+                  sensitivity = ISL_MODE_10KLUX;
                 } else {
                   Serial.println("375 lux");
-                  rgb_config = ISL_MODE_375LUX;
+                  sensitivity = ISL_MODE_375LUX;
                 }
               } else if (jsoneq(response, token[index], P_IR_FILTER) == 0 && token[index + 1].type == JSMN_PRIMITIVE) {
                 index++;
                 Serial.print(F("Infrared filter: 0x"));
-                rgb_ir_filter = to_uint(response + token[index].start, (size_t) token[index].end - token[index].start);
-                Serial.println(rgb_ir_filter, 16);
+                infrared_filter = to_uint(response + token[index].start,
+                                          (size_t) token[index].end - token[index].start);
+                Serial.println(infrared_filter, 16);
               } else if (jsoneq(response, token[index], P_INTERVAL) == 0 && token[index + 1].type == JSMN_PRIMITIVE) {
                 index++;
                 Serial.print(F("Interval: "));
@@ -204,27 +233,24 @@ void process_response(const char *response) {
  * @param green part - passed by reference
  * @param blue part - passed by reference
  */
-void sample_rgb(uint8_t &red, uint8_t &green, uint8_t &blue) {
+void sample_rgb(uint16_t &red, uint16_t &green, uint16_t &blue) {
   i2c_init(I2C_SPEED_400KHZ);
 
-  isl_reset();
-  isl_set(ISL_R_COLOR_MODE, rgb_config | ISL_MODE_12BIT | ISL_MODE_RGB);
-  isl_set(ISL_R_FILTERING, rgb_ir_filter);
+  if (!isl_reset())
+    Serial.println(F("ISL29125 reset failed"));
+  if (!isl_set(ISL_R_COLOR_MODE, sensitivity | ISL_MODE_16BIT | ISL_MODE_RGB))
+    Serial.println(F("ISL29125 irt config failed"));
+  if (!isl_set(ISL_R_FILTERING, infrared_filter))
+    Serial.println(F("ISL29125 set infrared filtering failed"));
 
-  while (!(isl_get(ISL_R_STATUS) & ISL_STATUS_ADC_DONE)) Serial.write('%');
-  Serial.println();
-  for (uint8_t n = 0; n < 5; n++) {
-    red = isl_read_red8();
-    green = isl_read_green8();
-    blue = isl_read_blue8();
-  }
+  // wait for the conversion cycle to be done, this just indicates there is a cycle
+  // in progress. the actual r,g,b values are always available from the last cycle
+  for (uint8_t colors = 0; colors < 3; colors++)
+    while (!(isl_get(ISL_R_STATUS) & ISL_STATUS_ADC_DONE));
 
-  Serial.print(F("RGB: "));
-  Serial.print(red);
-  Serial.print(F(":"));
-  Serial.print(green);
-  Serial.print(F(":"));
-  Serial.println(blue);
+  red = isl_read_red();
+  green = isl_read_green();
+  blue = isl_read_blue();
 }
 
 /*!
@@ -232,14 +258,32 @@ void sample_rgb(uint8_t &red, uint8_t &green, uint8_t &blue) {
  * using a board specific key.
  */
 void send_sensor_data() {
-  uint8_t red = 0, green = 0, blue = 0;
+  uint16_t red = 0, green = 0, blue = 0;
   uint16_t bat_status = 0, bat_percent = 0, bat_voltage = 0;
   char *lat = NULL, *lon = NULL, *date = NULL, *time = NULL;
   char *payload, *payload_hash, *auth_hash;
   char *sig, *message;
 
-  // sample light data
+  // do an initial sampling
   sample_rgb(red, green, blue);
+
+  // auto-compensate for brightness
+  if (sensitivity == ISL_MODE_375LUX && red > 65000 && green > 65000 && blue > 65000) {
+    sensitivity = ISL_MODE_10KLUX;
+    sample_rgb(red, green, blue);
+  } else if (sensitivity == ISL_MODE_10KLUX && red < 200 && green < 200 && blue < 200) {
+    sensitivity = ISL_MODE_375LUX;
+    sample_rgb(red, green, blue);
+  }
+
+  Serial.print(F("RGB: "));
+  if (sensitivity == ISL_MODE_375LUX) Serial.print(F("375LUX:"));
+  else Serial.print(F("10kLUX:"));
+  Serial.print(red);
+  Serial.print(F(":"));
+  Serial.print(green);
+  Serial.print(F(":"));
+  Serial.println(blue);
 
   // read battery status
   sim800h.battery(bat_status, bat_percent, bat_voltage);
@@ -267,10 +311,12 @@ void send_sensor_data() {
   }
 
   // hashed payload structure IMEI{DATA}
-  // Example: '123456789012345{"r":44,"g":33,"b":22,"lat":"12.475886","lon":"51.505264","bat":100,"lps":99999}'
+  // Example: '123456789012345{"r":44,"g":33,"b":22,"s":0,"lat":"12.475886","lon":"51.505264","bat":100,"lps":99999}'
   sprintf_P(payload + 15,
-            PSTR("{\"r\":%3d,\"g\":%3d,\"b\":%3d,\"la\":\"%s\",\"lo\":\"%s\",\"ba\":%3d,\"lp\":%d}"),
-            red, green, blue, lat == NULL ? "" : lat, lon == NULL ? "" : lon, bat_percent, loop_counter);
+            PSTR("{\"r\":%u,\"g\":%u,\"b\":%u,\"s\":%1u,\"la\":\"%s\",\"lo\":\"%s\",\"ba\":%3u,\"lp\":%u}"),
+            red, green, blue, sensitivity == ISL_MODE_375LUX ? 0 : 1,
+            lat == NULL ? "" : lat, lon == NULL ? "" : lon,
+            bat_percent, loop_counter);
 
   // free latitude and longitude
   free(lat);
