@@ -13,6 +13,15 @@ set(CMAKE_TOOLCHAIN_FILE cmake/avr-arduino-toolchain.cmake)
 project(ubirch C CXX ASM)
 
 # NaCL AVR lib (sha256), special handling for an external makefile
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/sketches/libraries/avrnacl-20140813/config.in" NACLCONFIG)
+string(REGEX REPLACE "TARGET_DEVICE=[^\n]*" "TARGET_DEVICE=${MCU}" NACLCONFIG ${NACLCONFIG})
+string(REGEX REPLACE "CPUFREQ=[^\n]*" "CPUFREQ=${F_CPU}" NACLCONFIG ${NACLCONFIG})
+string(REGEX REPLACE "CC=[^\n]*" "CC=${AVRC}" NACLCONFIG ${NACLCONFIG})
+string(REGEX REPLACE "OBJCOPY=[^\n]*" "OBJCOPY=${OBJCOPY}" NACLCONFIG ${NACLCONFIG})
+string(REGEX REPLACE "AR=[^\n]*" "AR=${AVRAR}" NACLCONFIG ${NACLCONFIG})
+string(REGEX REPLACE "STRIP=[^\n]*" "STRIP=${AVRSTRIP}" NACLCONFIG ${NACLCONFIG})
+string(REGEX REPLACE "DEVICE_FILE=[^\n]*" "DEVICE_FILE=${SERIAL_DEV}" NACLCONFIG ${NACLCONFIG})
+file(WRITE "${CMAKE_CURRENT_SOURCE_DIR}/sketches/libraries/avrnacl-20140813/config" "${NACLCONFIG}")
 add_custom_command(
   OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/sketches/libraries/avrnacl-20140813/avrnacl_small/obj/libnacl.a
   COMMAND make
