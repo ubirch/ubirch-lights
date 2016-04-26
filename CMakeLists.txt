@@ -21,6 +21,7 @@ string(REGEX REPLACE "OBJCOPY=[^\n]*" "OBJCOPY=${OBJCOPY}" NACLCONFIG ${NACLCONF
 string(REGEX REPLACE "AR=[^\n]*" "AR=${AVRAR}" NACLCONFIG ${NACLCONFIG})
 string(REGEX REPLACE "STRIP=[^\n]*" "STRIP=${AVRSTRIP}" NACLCONFIG ${NACLCONFIG})
 string(REGEX REPLACE "DEVICE_FILE=[^\n]*" "DEVICE_FILE=${SERIAL_DEV}" NACLCONFIG ${NACLCONFIG})
+message(STATUS ${NACLCONFIG})
 file(WRITE "${CMAKE_CURRENT_SOURCE_DIR}/sketches/libraries/avrnacl-20140813/config" "${NACLCONFIG}")
 add_custom_command(
   OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/sketches/libraries/avrnacl-20140813/avrnacl_small/obj/libnacl.a
