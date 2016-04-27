@@ -100,7 +100,7 @@ static unsigned int to_uint(const char *ptr, size_t len) {
 }
 
 // print a hex representation of the has byte array
-static inline void print_hash(char *sig) {
+static inline void print_hash(const char *sig) {
   Serial.print(F("[HASH] "));
   for (uint8_t i = 0; i < crypto_hash_BYTES; i++) Serial.print((unsigned char) sig[i], 16);
   Serial.println();
@@ -151,8 +151,6 @@ void process_response(char *response, char *&payload, char *&signature) {
 
         // extract signature and decode it
         base64_decode(tmp_signature, (response + token[index].start), token[index].end - token[index].start);
-        print_hash(tmp_signature);
-
       } else if (jsoneq(response, token[index], P_PAYLOAD) == 0 && token[index + 1].type == JSMN_OBJECT) {
         index++;
         Serial.print(F("payload: "));
@@ -219,6 +217,7 @@ bool verify_payload(const char *payload, const char *signature) {
 
     crypto_hash_sha512((unsigned char *) payload_hash, (const unsigned char *) payload, strlen(payload));
     print_hash(payload_hash);
+    print_hash(signature);
 
     signature_verified = !memcmp(signature, payload_hash, crypto_hash_BYTES);
     if (!signature_verified) error_flag |= E_SIG_VRFY_FAIL;
