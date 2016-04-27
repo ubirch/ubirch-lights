@@ -64,6 +64,9 @@ extern "C" {
 #define E_NO_MEMORY     0b10000000
 #define E_NO_CONNECTION 0b01000000
 
+#define ISL_327LUX_MAX 65000
+#define ISL_10KLUX_MIN 8000
+
 UbirchSIM800 sim800h = UbirchSIM800();
 
 // this counts up as long as we don't have a reset
@@ -183,7 +186,8 @@ void process_response(char *response, char *&payload, char *&signature) {
   // copy the locally (stack) allocated payload and signature to heap
   if(tmp_payload != NULL && tmp_signature != NULL) {
     payload = strdup(tmp_payload);
-    signature = strdup(tmp_signature);
+    signature = (char *) malloc(crypto_hash_BYTES);
+    memcpy(signature , tmp_signature, crypto_hash_BYTES);
   }
 }
 
@@ -342,10 +346,10 @@ void send_sensor_data() {
   sample_rgb(red, green, blue);
 
   // auto-compensate for brightness
-  if (sensitivity == ISL_MODE_375LUX && red > 65000 && green > 65000 && blue > 65000) {
+  if (sensitivity == ISL_MODE_375LUX && red > ISL_327LUX_MAX && green > ISL_327LUX_MAX && blue > ISL_327LUX_MAX) {
     sensitivity = ISL_MODE_10KLUX;
     sample_rgb(red, green, blue);
-  } else if (sensitivity == ISL_MODE_10KLUX && red < 200 && green < 200 && blue < 200) {
+  } else if (sensitivity == ISL_MODE_10KLUX && red < ISL_10KLUX_MIN && green < ISL_10KLUX_MIN && blue < ISL_10KLUX_MIN) {
     sensitivity = ISL_MODE_375LUX;
     sample_rgb(red, green, blue);
   }

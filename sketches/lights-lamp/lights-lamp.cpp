@@ -246,7 +246,8 @@ void process_response(char *response, char *&payload, char *&signature) {
   // copy the locally (stack) allocated payload and signature to heap
   if(tmp_payload != NULL && tmp_signature != NULL) {
     payload = strdup(tmp_payload);
-    signature = strdup(tmp_signature);
+    signature = (char *) malloc(crypto_hash_BYTES);
+    memcpy(signature , tmp_signature, crypto_hash_BYTES);
   }
 }
 
