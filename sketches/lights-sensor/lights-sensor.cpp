@@ -513,7 +513,6 @@ void loop() {
   digitalWrite(LED, HIGH);
   pinMode(WATCHDOG, INPUT);
 
-
   // wake up the SIM800
   if (sim800h.wakeup()) {
     // try to connect and enable GPRS, send if successful

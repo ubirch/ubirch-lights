@@ -29,28 +29,21 @@ make
 
 ### RGB Sensor Code
 
-The sensor POSTs a payload like the following:
+The sensor POSTs measures the RGB values in 16 bit and sends them to the server. It will also do
+some auto-compensation depending on the brightness of the sourroundings, changing the sensitivity/range
+between 375 lux in darker environments and 10k lux in bright environments. This needs to be taken
+into account when comparing color values.
 
 ```
 {
   "v":"0.0.1",
   "a":"z3UuSIOGG0gPLpQchbBUliKmnVLS91SYbp7GScKf17hXBCen27tSeEQXoJ2YKE2Yb9IHbLU6Ctmy88/W3ImP0w==",
   "s":"NgtG1n1eorgEFXiuoDwIW6vuQ1956bROeIE4cRqLBbXDtaPtdP1UpFUPb+3NH5hC4XOm1ZjvxFQAueGn7QKrSA==",
-  "p":{
-    "r":21357,
-    "g":14254,
-    "b":11646,
-    "s":0,
-    "la":"52.505257",
-    "lo":"13.475882",
-    "ba":100,
-    "lp":1,
-    "e":0
-  }
+  "p":{"r":21357,"g":14254,"b":11646,"s":0,"la":"52.505257","lo":"13.475882","ba":100,"lp":1,"e":0}
 }
 ```
 
-- ```v``` is the protocol version (currently accepted is ```0.0.x```)
+- ```v``` is the protocol version (```0.0.1```)
 - ```a``` is the authorization key (hashed)
 - ```s``` is a hash of the payload signature
 - ```p``` the actual sensor payload
@@ -68,6 +61,23 @@ The sensor POSTs a payload like the following:
     0b10000000 - out of memory parsing last response (possibly due to too large response payload)
     0b01000000 - could not establish a mobile connection last time
     ```
+
+In response the sensor expects the following:
+
+```
+{
+  "v":"0.0.1",
+  "s":"Z63ZeXEMXbWoIQLTTPWcArsVLt6ePXOHJG1rhE9QCrRJe2MhL9rZ5tSyEKK7h7Z6W07IFknzaiL84uKdUWjy4g==",
+  "p":{"s":0,"ir":20,"i":900}
+}
+```
+
+- ```v``` is the protocol version (currently accepted is ```0.0.x```)
+- ```s``` is a hash of the payload signature
+- ```p``` the actual sensor payload
+  - ```s``` is the sensitivity it should by default measure with (```0``` = 375 lux or ```1``` = 10k lux)
+  - ```ir``` the infrared filter setting (0 - 63, max is default)
+  - ``i`` - the sleep interval
 
 To debug the sensor, connect to the serial port (middle Grove) with ```115200 8N1```. It will
 print some diagnostic output to identify a possible problem.
