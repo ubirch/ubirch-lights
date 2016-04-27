@@ -53,14 +53,15 @@ into account when comparing color values.
   - ```ba``` is the current battery status (percent full, 0-100)
   - ```lp``` is the amount of loops without reboot
   - ```e``` is an error code bitfield which may contain:
-    ```
-    0b00000001 - RGB sensor failed (electrical or I2C error)
-    0b00000010 - protocol mismatch in last response
-    0b00000100 - signature of last response could not be verified
-    0b00001000 - json parsing of last response failed (json syntax error?)
-    0b10000000 - out of memory parsing last response (possibly due to too large response payload)
-    0b01000000 - could not establish a mobile connection last time
-    ```
+
+```
+0b00000001 - RGB sensor failed (electrical or I2C error)
+0b00000010 - protocol mismatch in last response
+0b00000100 - signature of last response could not be verified
+0b00001000 - json parsing of last response failed (json syntax error?)
+0b10000000 - out of memory parsing last response (possibly due to too large response payload)
+0b01000000 - could not establish a mobile connection last time
+```
 
 In response the sensor expects the following:
 
