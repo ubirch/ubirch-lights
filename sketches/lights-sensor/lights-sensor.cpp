@@ -56,10 +56,18 @@ extern "C" {
 #define P_IR_FILTER "ir"
 #define P_INTERVAL "i"
 
+// error flags
+#define E_SENSOR_FAILED 0b00000001
+#define E_PROTOCOL_FAIL 0b00000010
+#define E_SIG_VRFY_FAIL 0b00000100
+#define E_NO_MEMORY     0b10000000
+#define E_NO_CONNECTION 0b01000000
+
 UbirchSIM800 sim800h = UbirchSIM800();
 
 // this counts up as long as we don't have a reset
 static uint16_t loop_counter = 1;
+static uint8_t error_flag = 0x00;
 
 // internal sensor state
 static uint16_t interval = DEFAULT_INTERVAL;
@@ -130,7 +138,9 @@ void process_response(char *response, char *&payload, char *&signature) {
           if (strncmp_P(response + token[index].start, PSTR(PROTOCOL_VERSION_MIN), 3) != 0) {
             Serial.print(F("protocol version mismatch: "));
             print_token(response, token[index]);
+
             // do not continue if the version does not match, free already copied payload or sig
+            error_flag |= E_PROTOCOL_FAIL;
             break;
           }
         } else if (jsoneq(response, token[index], P_SIGNATURE) == 0 && token[index + 1].type == JSMN_STRING) {
@@ -207,14 +217,13 @@ bool verify_payload(const char *payload, const char *signature) {
     print_hash(payload_hash);
 
     signature_verified = !memcmp(signature, payload_hash, crypto_hash_BYTES);
-
-    Serial.print(F("signature: "));
-    Serial.println(signature_verified);
+    if(!signature_verified) error_flag |= E_SIG_VRFY_FAIL;
 
     // free the payload hash
     free(payload_hash);
   } else {
     Serial.println(F("payload too large, may crash..."));
+    error_flag |= E_NO_MEMORY;
   }
 
   return signature_verified;
@@ -280,24 +289,38 @@ void process_payload(char *payload) {
  * @param green part - passed by reference
  * @param blue part - passed by reference
  */
-void sample_rgb(uint16_t &red, uint16_t &green, uint16_t &blue) {
+bool sample_rgb(uint16_t &red, uint16_t &green, uint16_t &blue) {
   i2c_init(I2C_SPEED_400KHZ);
 
-  if (!isl_reset())
+  if (!isl_reset()) {
     Serial.println(F("ISL29125 reset failed"));
-  if (!isl_set(ISL_R_COLOR_MODE, sensitivity | ISL_MODE_16BIT | ISL_MODE_RGB))
+    error_flag |= E_SENSOR_FAILED;
+    return false;
+  }
+  if (!isl_set(ISL_R_COLOR_MODE, sensitivity | ISL_MODE_16BIT | ISL_MODE_RGB)) {
     Serial.println(F("ISL29125 ir config failed"));
-  if (!isl_set(ISL_R_FILTERING, infrared_filter))
+    error_flag |= E_SENSOR_FAILED;
+    return false;
+  }
+  if (!isl_set(ISL_R_FILTERING, infrared_filter)) {
     Serial.println(F("ISL29125 set infrared filtering failed"));
+    error_flag |= E_SENSOR_FAILED;
+    return false;
+  }
+
 
   // wait for the conversion cycle to be done, this just indicates there is a cycle
   // in progress. the actual r,g,b values are always available from the last cycle
-  for (uint8_t colors = 0; colors < 3; colors++)
-    while (!(isl_get(ISL_R_STATUS) & ISL_STATUS_ADC_DONE));
+  for (uint8_t colors = 0; colors < 3; colors++) {
+    uint8_t timeout = 150;
+    while (!(isl_get(ISL_R_STATUS) & ISL_STATUS_ADC_DONE) && --timeout) delay(1);
+  }
 
   red = isl_read_red();
   green = isl_read_green();
   blue = isl_read_blue();
+
+  return true;
 }
 
 /*!
@@ -360,10 +383,11 @@ void send_sensor_data() {
   // hashed payload structure IMEI{DATA}
   // Example: '123456789012345{"r":44,"g":33,"b":22,"s":0,"lat":"12.475886","lon":"51.505264","bat":100,"lps":99999}'
   sprintf_P(payload + 15,
-            PSTR("{\"r\":%u,\"g\":%u,\"b\":%u,\"s\":%1u,\"la\":\"%s\",\"lo\":\"%s\",\"ba\":%3u,\"lp\":%u}"),
+            PSTR("{\"r\":%u,\"g\":%u,\"b\":%u,\"s\":%1u,\"la\":\"%s\",\"lo\":\"%s\",\"ba\":%3u,\"lp\":%u,\"e\":%u}"),
             red, green, blue, sensitivity == ISL_MODE_375LUX ? 0 : 1,
             lat == NULL ? "" : lat, lon == NULL ? "" : lon,
-            bat_percent, loop_counter);
+            bat_percent, loop_counter, error_flag);
+  error_flag = 0;
 
   // free latitude and longitude
   free(lat);
@@ -441,7 +465,10 @@ void send_sensor_data() {
       process_response(response, payload, signature);
       // verify and process payload
       if (verify_payload(payload, signature)) {
+        Serial.println(F("signature verified OK"));
         process_payload(payload + 15);
+      } else {
+        Serial.println(F("signature failed to verify"));
       }
       free(signature);
       free(payload);
@@ -513,5 +540,5 @@ void loop() {
   delay(100);
 
   // sleep interval seconds (put MCU in low power mode)
-//  sleep(interval);
+  sleep(interval);
 }
