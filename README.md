@@ -27,6 +27,52 @@ cmake ..
 make
 ```
 
+### RGB Sensor Code
+
+The sensor POSTs a payload like the following:
+
+```
+{
+  "v":"0.0.1",
+  "a":"z3UuSIOGG0gPLpQchbBUliKmnVLS91SYbp7GScKf17hXBCen27tSeEQXoJ2YKE2Yb9IHbLU6Ctmy88/W3ImP0w==",
+  "s":"NgtG1n1eorgEFXiuoDwIW6vuQ1956bROeIE4cRqLBbXDtaPtdP1UpFUPb+3NH5hC4XOm1ZjvxFQAueGn7QKrSA==",
+  "p":{
+    "r":21357,
+    "g":14254,
+    "b":11646,
+    "s":0,
+    "la":"52.505257",
+    "lo":"13.475882",
+    "ba":100,
+    "lp":1,
+    "e":0
+  }
+}
+```
+
+- ```v``` is the protocol version (currently accepted is ```0.0.x```)
+- ```a``` is the authorization key (hashed)
+- ```s``` is a hash of the payload signature
+- ```p``` the actual sensor payload
+  - ```r```,```g```,```b``` are 16 bit color values (0-65535)
+  - ```s``` is the sensitivity/range at which the colors were measured (```0``` = 375 lux or ```1``` = 10k lux)
+  - ```la```,```lo``` is the current approximate geo-location of the sensor
+  - ```ba``` is the current battery status (percent full, 0-100)
+  - ```lp``` is the amount of loops without reboot
+  - ```e``` is an error code bitfield which may contain:
+    ```
+    0b00000001 - RGB sensor failed (electrical or I2C error)
+    0b00000010 - protocol mismatch in last response
+    0b00000100 - signature of last response could not be verified
+    0b00001000 - json parsing of last response failed (json syntax error?)
+    0b10000000 - out of memory (possibly due to too large response payload)
+    0b01000000 - could not establish a mobile connection last time
+    ```
+
+To debug the sensor, connect to the serial port (middle Grove) with ```115200 8N1```. It will
+print some diagnostic output to identify a possible problem.
+
+
 ## LICENSE
 
     Copyright 2015 ubirch GmbH (http://www.ubirch.com)

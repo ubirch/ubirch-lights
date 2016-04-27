@@ -60,6 +60,7 @@ extern "C" {
 #define E_SENSOR_FAILED 0b00000001
 #define E_PROTOCOL_FAIL 0b00000010
 #define E_SIG_VRFY_FAIL 0b00000100
+#define E_JSON_FAILED   0b00001000
 #define E_NO_MEMORY     0b10000000
 #define E_NO_CONNECTION 0b01000000
 
@@ -174,6 +175,8 @@ void process_response(char *response, char *&payload, char *&signature) {
         }
       }
     }
+  } else {
+    error_flag |= E_JSON_FAILED;
   }
 
   // free used heap, the token and the no longer used response
@@ -277,6 +280,8 @@ void process_payload(char *payload) {
         }
       }
     }
+  } else {
+    error_flag |= E_JSON_FAILED;
   }
 
   free(token);
@@ -512,7 +517,8 @@ void loop() {
   // wake up the SIM800
   if (sim800h.wakeup()) {
     // try to connect and enable GPRS, send if successful
-    for (uint8_t tries = 2; tries > 0; tries--) {
+    uint8_t tries;
+    for (tries = 2; tries > 0; tries--) {
       if (sim800h.registerNetwork(60000) && sim800h.enableGPRS()) {
         Serial.print(query_free_sram());
         Serial.println(F(" byte free"));
@@ -527,6 +533,7 @@ void loop() {
       Serial.println();
       Serial.println(F("mobile network failed"));
     }
+    if(tries == 0) error_flag |= E_NO_CONNECTION;
   }
   sim800h.shutdown();
 
