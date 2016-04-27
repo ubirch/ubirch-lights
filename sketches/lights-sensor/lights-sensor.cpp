@@ -112,7 +112,8 @@ static inline void print_hash(char *sig) {
  * checked for signature match and protocol version.
  *
  * @param response the request response, will be freed here
- * @param payload the extracted payload, if signature is verified
+ * @param payload the extracted payload
+ * @param signature the extracted payload signature
  */
 void process_response(char *response, char *&payload, char *&signature) {
   char tmp_signature[crypto_hash_BYTES], *tmp_payload = NULL;
@@ -130,49 +131,47 @@ void process_response(char *response, char *&payload, char *&signature) {
   // reset parser, parse and store tokens
   jsmn_init(&parser);
   const int parsed_token_count = jsmn_parse(&parser, response, strlen(response), token, token_count);
-  if (parsed_token_count == token_count) {
+  if (parsed_token_count == token_count && token[0].type == JSMN_OBJECT) {
     uint8_t index = 0;
-    if (token[0].type == JSMN_OBJECT) {
-      while (++index < token_count) {
-        if (jsoneq(response, token[index], P_VERSION) == 0 && token[index + 1].type == JSMN_STRING) {
-          index++;
-          if (strncmp_P(response + token[index].start, PSTR(PROTOCOL_VERSION_MIN), 3) != 0) {
-            Serial.print(F("protocol version mismatch: "));
-            print_token(response, token[index]);
-
-            // do not continue if the version does not match, free already copied payload or sig
-            error_flag |= E_PROTOCOL_FAIL;
-            break;
-          }
-        } else if (jsoneq(response, token[index], P_SIGNATURE) == 0 && token[index + 1].type == JSMN_STRING) {
-          index++;
-          Serial.print(F("signature: "));
+    while (++index < token_count) {
+      if (jsoneq(response, token[index], P_VERSION) == 0 && token[index + 1].type == JSMN_STRING) {
+        index++;
+        if (strncmp_P(response + token[index].start, PSTR(PROTOCOL_VERSION_MIN), 3) != 0) {
+          Serial.print(F("protocol version mismatch: "));
           print_token(response, token[index]);
 
-          // extract signature and decode it
-          base64_decode(tmp_signature, (response + token[index].start), token[index].end - token[index].start);
-          print_hash(tmp_signature);
-
-        } else if (jsoneq(response, token[index], P_PAYLOAD) == 0 && token[index + 1].type == JSMN_OBJECT) {
-          index++;
-          Serial.print(F("payload: "));
-          print_token(response, token[index]);
-
-          // extract payload from json
-          uint8_t tmp_payload_length = (uint8_t) (token[index].end - token[index].start);
-          // allocate the temporary payload on the stack, we will copy it to heap after freeing some space
-          tmp_payload = (char *) alloca((size_t) (16 + tmp_payload_length));
-          sim800h.IMEI(tmp_payload);
-          strncpy(tmp_payload + 15, response + token[index].start, tmp_payload_length);
-          tmp_payload[15 + tmp_payload_length] = '\0';
-
-          index += 2 * token[index].size;
-        } else {
-          // simply ignore unknown keys
-          Serial.print(F("unknown key: "));
-          print_token(response, token[index]);
-          index++;
+          // do not continue if the version does not match, free already copied payload or sig
+          error_flag |= E_PROTOCOL_FAIL;
+          break;
         }
+      } else if (jsoneq(response, token[index], P_SIGNATURE) == 0 && token[index + 1].type == JSMN_STRING) {
+        index++;
+        Serial.print(F("signature: "));
+        print_token(response, token[index]);
+
+        // extract signature and decode it
+        base64_decode(tmp_signature, (response + token[index].start), token[index].end - token[index].start);
+        print_hash(tmp_signature);
+
+      } else if (jsoneq(response, token[index], P_PAYLOAD) == 0 && token[index + 1].type == JSMN_OBJECT) {
+        index++;
+        Serial.print(F("payload: "));
+        print_token(response, token[index]);
+
+        // extract payload from json
+        uint8_t tmp_payload_length = (uint8_t) (token[index].end - token[index].start);
+        // allocate the temporary payload on the stack, we will copy it to heap after freeing some space
+        tmp_payload = (char *) alloca((size_t) (16 + tmp_payload_length));
+        sim800h.IMEI(tmp_payload);
+        strncpy(tmp_payload + 15, response + token[index].start, tmp_payload_length);
+        tmp_payload[15 + tmp_payload_length] = '\0';
+
+        index += 2 * token[index].size;
+      } else {
+        // simply ignore unknown keys
+        Serial.print(F("unknown key: "));
+        print_token(response, token[index]);
+        index++;
       }
     }
   } else {
@@ -220,7 +219,7 @@ bool verify_payload(const char *payload, const char *signature) {
     print_hash(payload_hash);
 
     signature_verified = !memcmp(signature, payload_hash, crypto_hash_BYTES);
-    if(!signature_verified) error_flag |= E_SIG_VRFY_FAIL;
+    if (!signature_verified) error_flag |= E_SIG_VRFY_FAIL;
 
     // free the payload hash
     free(payload_hash);
@@ -247,37 +246,36 @@ void process_payload(char *payload) {
 
   // reset parser, parse and store tokens
   jsmn_init(&parser);
-  if (jsmn_parse(&parser, payload, strlen(payload), token, token_count) == token_count) {
+  if (jsmn_parse(&parser, payload, strlen(payload), token, token_count) == token_count &&
+      token[0].type == JSMN_OBJECT) {
     uint8_t index = 0;
-    if (token[0].type == JSMN_OBJECT) {
-      while (++index < token_count) {
-        if (jsoneq(payload, token[index], P_SENSITIVITY) == 0 && token[index + 1].type == JSMN_PRIMITIVE) {
-          index++;
-          Serial.print(F("sensitivity: "));
-          if (*(payload + token[index].start) - '0') {
-            Serial.println(F("10K lux"));
-            sensitivity = ISL_MODE_10KLUX;
-          } else {
-            Serial.println(F("375 lux"));
-            sensitivity = ISL_MODE_375LUX;
-          }
-        } else if (jsoneq(payload, token[index], P_IR_FILTER) == 0 && token[index + 1].type == JSMN_PRIMITIVE) {
-          index++;
-          Serial.print(F("infrared filter: 0x"));
-          infrared_filter = to_uint(payload + token[index].start,
-                                    (size_t) token[index].end - token[index].start);
-          Serial.println(infrared_filter, 16);
-        } else if (jsoneq(payload, token[index], P_INTERVAL) == 0 && token[index + 1].type == JSMN_PRIMITIVE) {
-          index++;
-          Serial.print(F("Interval: "));
-          interval = to_uint(payload + token[index].start, (size_t) token[index].end - token[index].start);
-          Serial.print(interval);
-          Serial.println(F("s"));
+    while (++index < token_count) {
+      if (jsoneq(payload, token[index], P_SENSITIVITY) == 0 && token[index + 1].type == JSMN_PRIMITIVE) {
+        index++;
+        Serial.print(F("sensitivity: "));
+        if (*(payload + token[index].start) - '0') {
+          Serial.println(F("10K lux"));
+          sensitivity = ISL_MODE_10KLUX;
         } else {
-          Serial.print(F("unknown payload key: "));
-          print_token(payload, token[index]);
-          index++;
+          Serial.println(F("375 lux"));
+          sensitivity = ISL_MODE_375LUX;
         }
+      } else if (jsoneq(payload, token[index], P_IR_FILTER) == 0 && token[index + 1].type == JSMN_PRIMITIVE) {
+        index++;
+        Serial.print(F("infrared filter: 0x"));
+        infrared_filter = to_uint(payload + token[index].start,
+                                  (size_t) token[index].end - token[index].start);
+        Serial.println(infrared_filter, 16);
+      } else if (jsoneq(payload, token[index], P_INTERVAL) == 0 && token[index + 1].type == JSMN_PRIMITIVE) {
+        index++;
+        Serial.print(F("Interval: "));
+        interval = to_uint(payload + token[index].start, (size_t) token[index].end - token[index].start);
+        Serial.print(interval);
+        Serial.println(F("s"));
+      } else {
+        Serial.print(F("unknown payload key: "));
+        print_token(payload, token[index]);
+        index++;
       }
     }
   } else {
@@ -532,7 +530,7 @@ void loop() {
       Serial.println();
       Serial.println(F("mobile network failed"));
     }
-    if(tries == 0) error_flag |= E_NO_CONNECTION;
+    if (tries == 0) error_flag |= E_NO_CONNECTION;
   }
   sim800h.shutdown();
 

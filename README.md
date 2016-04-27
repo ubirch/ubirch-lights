@@ -84,6 +84,60 @@ In response the sensor expects the following:
 To debug the sensor, connect to the serial port (middle Grove) with ```115200 8N1```. It will
 print some diagnostic output to identify a possible problem.
 
+### Lamp Code
+
+The lamp requests the newest RGB values by posting it's own approximate location as well as
+battery status and loop count.
+
+```
+{
+  "v":"0.0.1",
+  "a":"z3UuSIOGG0gPLpQchbBUliKmnVLS91SYbp7GScKf17hXBCen27tSeEQXoJ2YKE2Yb9IHbLU6Ctmy88/W3ImP0w==",
+  "s":"ES8fvE9QbyuQhs+JtimQokrFc/xuils9EkVSTX4S0X8sCgVb8XNDjoVmI0X00itB2tplGOIEcL2ZwWr6htL1BA==",
+  "p":{"la":"52.505257","lo":"13.475882","ba":100,"lp":1,"e":0}
+}
+```
+
+- ```v``` is the protocol version (```0.0.1```)
+- ```a``` is the authorization key (hashed)
+- ```s``` is a hash of the payload signature
+- ```p``` the actual sensor payload
+  - ```la```,```lo``` is the current approximate geo-location of the sensor
+  - ```ba``` is the current battery status (percent full, 0-100)
+  - ```lp``` is the amount of loops without reboot
+  - ```e``` is an error code bitfield
+
+#### The error code bits:
+```
+0b00000001 - [unused] LED failed (currently not detectable)
+0b00000010 - protocol mismatch in last response
+0b00000100 - signature of last response could not be verified
+0b00001000 - json parsing of last response failed (json syntax error?)
+0b10000000 - out of memory parsing last response (possibly due to too large response payload)
+0b01000000 - could not establish a mobile connection last time
+```
+
+In response the lamp expects the following:
+
+```
+{
+  "v":"0.0.1",
+  "s":"f+OtwZyygNh9RpChE/bK1s5ixSHEQC4axYXlt7OkUKpp6XvkmHHqvAU40d+6GVx2DO1Wcgs2KsXVJn5dxnEeXQ==",
+  "p":{"bf":0,"i":900,"r":11822,"g":11298,"b":7160,"t":"RGB"}
+}
+```
+
+- ```v``` is the protocol version (currently accepted is ```0.0.x```)
+- ```s``` is a hash of the payload signature
+- ```p``` the actual sensor payload
+  - ```r```,```g```,```b``` 8 bit color values (0-255, will adapt 16 bit values to 8 bit)
+  - ```bf``` blink flag, lets the lamp blink once after update
+  - ```t``` **not implemented** the LED type, default ```0bRRRRGGBB```, as described in
+    [Adafruit NeoPixel code](https://github.com/adafruit/Adafruit_NeoPixel/blob/master/Adafruit_NeoPixel.h)
+  - ``i`` - the sleep interval
+
+To debug the lamp, connect to the serial port (middle Grove) with ```115200 8N1```. It will
+print some diagnostic output to identify a possible problem.
 
 ## LICENSE
 
