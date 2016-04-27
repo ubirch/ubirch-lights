@@ -183,8 +183,10 @@ void process_response(char *response, char *&payload, char *&signature) {
   free(response);
 
   // copy the locally (stack) allocated payload and signature to heap
-  payload = strdup(tmp_payload);
-  signature = strdup(tmp_signature);
+  if(tmp_payload != NULL && tmp_signature != NULL) {
+    payload = strdup(tmp_payload);
+    signature = strdup(tmp_signature);
+  }
 }
 
 /*!

@@ -194,7 +194,6 @@ void process_response(char *response, char *&payload, char *&signature) {
   // reset parser, parse and store tokens
   jsmn_init(&parser);
   const int parsed_token_count = jsmn_parse(&parser, response, strlen(response), token, token_count);
-  Serial.println(parsed_token_count);
   if (parsed_token_count == token_count && token[0].type == JSMN_OBJECT) {
     uint8_t index = 0;
     while (++index < token_count) {
@@ -247,8 +246,10 @@ void process_response(char *response, char *&payload, char *&signature) {
   free(response);
 
   // copy the locally (stack) allocated payload and signature to heap
-  payload = strdup(tmp_payload);
-  signature = strdup(tmp_signature);
+  if(tmp_payload != NULL && tmp_signature != NULL) {
+    payload = strdup(tmp_payload);
+    signature = strdup(tmp_signature);
+  }
 }
 
 /*!
@@ -418,6 +419,7 @@ void receive_rgb_data() {
 
   // free signature buffer
   free(signature);
+  signature = NULL;
 
   Serial.print(F("auth hash   : "));
   Serial.println(auth_hash);
@@ -430,6 +432,7 @@ void receive_rgb_data() {
 
   // free payload and hashes
   free(payload);
+  payload = NULL;
   free(payload_hash);
   free(auth_hash);
 
