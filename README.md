@@ -123,7 +123,7 @@ In response the lamp expects the following:
 {
   "v":"0.0.1",
   "s":"f+OtwZyygNh9RpChE/bK1s5ixSHEQC4axYXlt7OkUKpp6XvkmHHqvAU40d+6GVx2DO1Wcgs2KsXVJn5dxnEeXQ==",
-  "p":{"bf":0,"i":900,"r":11822,"g":11298,"b":7160,"t":"RGB"}
+  "p":{"bf":0,"i":900,"r":11822,"g":11298,"b":7160,"t":6}
 }
 ```
 
