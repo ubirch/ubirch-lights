@@ -60,9 +60,3 @@ void sleep(unsigned int seconds) {
 
 // the ISR is necessary to allow the CPU from actually sleeping
 ISR (WDT_vect) { }
-//
-//void get_mcusr(void) __attribute__((naked))  __attribute__((section(".init3")));
-//void get_mcusr(void) {
-//  MCUSR = 0;
-//  wdt_disable();
-//}
