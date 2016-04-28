@@ -505,11 +505,10 @@ void setup() {
   sim800h.setAPN(F(FONA_APN), F(FONA_USER), F(FONA_PASS));
 
   neo_pixel.begin(); // initialize NeoPixel
+  neo_pixel.updateType(pixel_type);
   neo_pixel.show(); // Initialize all pixels to 'off'
+
   neo_pixel.setPixelColor(0, 255, 0, 0);
-  neo_pixel.show();
-  sleep(5);
-  neo_pixel.setPixelColor(0, 0, 255, 0);
   neo_pixel.show();
   sleep(5);
   neo_pixel.setPixelColor(0, 0, 255, 0);
