@@ -322,7 +322,7 @@ void process_payload(char *payload) {
       if (jsoneq(payload, token[index], P_BLINK) == 0 && token[index + 1].type == JSMN_PRIMITIVE) {
         index++;
         blink = (*(payload + token[index].start) - '0') != 0;
-      } else if (jsoneq(payload, token[index], P_PIXEL_TYPE) == 0 && token[index + 1].type == JSMN_STRING) {
+      } else if (jsoneq(payload, token[index], P_PIXEL_TYPE) == 0 && token[index + 1].type == JSMN_PRIMITIVE) {
         index++;
         pixel_type = to_uint8(payload + token[index].start, (size_t) token[index].end - token[index].start);
       } else if (jsoneq(payload, token[index], P_RED) == 0 && token[index + 1].type == JSMN_PRIMITIVE) {
@@ -506,6 +506,21 @@ void setup() {
 
   neo_pixel.begin(); // initialize NeoPixel
   neo_pixel.show(); // Initialize all pixels to 'off'
+  neo_pixel.setPixelColor(0, 255, 0, 0);
+  neo_pixel.show();
+  sleep(5);
+  neo_pixel.setPixelColor(0, 0, 255, 0);
+  neo_pixel.show();
+  sleep(5);
+  neo_pixel.setPixelColor(0, 0, 255, 0);
+  neo_pixel.show();
+  sleep(5);
+  neo_pixel.setPixelColor(0, 0, 0, 255);
+  neo_pixel.show();
+  sleep(5);
+  neo_pixel.setPixelColor(0, 0, 0, 0);
+  neo_pixel.show();
+
 }
 
 void loop() {
