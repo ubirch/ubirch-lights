@@ -6,7 +6,7 @@
 #define UBIRCH_FEWL_CONFIG_H
 
 // put your thingspeak url here including the token and the channel id
-#define PUSH_URL "http://xxx.api.ubirch.com/update"
+#define PUSH_URL "http://api.ubirch.com/lights"
 
 #define FONA_APN "<apn>"
 #define FONA_USER "<username>"
