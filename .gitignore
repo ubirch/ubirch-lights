@@ -8,3 +8,4 @@ sketches/libraries/Adafruit_NeoPixel
 sketches/libraries/arduino-base64
 sketches/libraries/jsmn
 build/
+.DS_Store
