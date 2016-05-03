@@ -305,28 +305,30 @@ bool sample_rgb(uint16_t &red, uint16_t &green, uint16_t &blue) {
     error_flag |= E_SENSOR_FAILED;
     return false;
   }
-  if (!isl_set(ISL_R_COLOR_MODE, sensitivity | ISL_MODE_16BIT | ISL_MODE_RGB)) {
-    Serial.println(F("ISL29125 ir config failed"));
-    error_flag |= E_SENSOR_FAILED;
-    return false;
-  }
+  // we need to set the filter first, then as sampling starts with the 0x01 (COLOR_MODE) register
   if (!isl_set(ISL_R_FILTERING, infrared_filter)) {
     Serial.println(F("ISL29125 set infrared filtering failed"));
     error_flag |= E_SENSOR_FAILED;
     return false;
   }
-
-
-  // wait for the conversion cycle to be done, this just indicates there is a cycle
-  // in progress. the actual r,g,b values are always available from the last cycle
-  for (uint8_t colors = 0; colors < 3; colors++) {
-    uint8_t timeout = 150;
-    while (!(isl_get(ISL_R_STATUS) & ISL_STATUS_ADC_DONE) && --timeout) delay(1);
+  // set sensitivity and color mode and start sampling
+  if (!isl_set(ISL_R_COLOR_MODE, sensitivity | ISL_MODE_16BIT | ISL_MODE_RGB)) {
+    Serial.println(F("ISL29125 ir config failed"));
+    error_flag |= E_SENSOR_FAILED;
+    return false;
   }
+
+  // wait for a full integration cycle to be done on the ISL29125
+  // one cycle is theoretically 100ms, but at 400 we always missed blue,
+  // so we wan to make sure
+  delay(600);
 
   red = isl_read_red();
   green = isl_read_green();
   blue = isl_read_blue();
+
+  // power down the RGB sensor chip
+  isl_set(ISL_R_COLOR_MODE, ISL_MODE_POWERDOWN);
 
   return true;
 }
@@ -499,9 +501,9 @@ void setup() {
   pinMode(WATCHDOG, INPUT);
 
   digitalWrite(LED, HIGH);
-  delay(100);
+  sleep(1);
   digitalWrite(LED, LOW);
-  delay(100);
+  sleep(1);
 
   // edit APN settings in config.h
   sim800h.setAPN(F(FONA_APN), F(FONA_USER), F(FONA_PASS));
