@@ -393,7 +393,7 @@ void send_sensor_data() {
   // hashed payload structure IMEI{DATA}
   // Example: '123456789012345{"r":44,"g":33,"b":22,"s":0,"lat":"12.475886","lon":"51.505264","bat":100,"lps":99999}'
   sprintf_P(payload + 15,
-            PSTR("{\"r\":%u,\"g\":%u,\"b\":%u,\"s\":%1u,\"la\":\"%s\",\"lo\":\"%s\",\"ba\":%3u,\"lp\":%u,\"e\":%u}"),
+            PSTR("{\"r\":%u,\"g\":%u,\"b\":%u,\"s\":%1u,\"la\":\"%s\",\"lo\":\"%s\",\"ba\":%u,\"lp\":%u,\"e\":%u}"),
             red, green, blue, sensitivity == ISL_MODE_375LUX ? 0 : 1,
             lat == NULL ? "" : lat, lon == NULL ? "" : lon,
             bat_percent, loop_counter, error_flag);
