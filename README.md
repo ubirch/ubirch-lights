@@ -4,7 +4,7 @@ It is the code that runs the [re:publica 2015 FEWL installation](https://www.fac
 code runs on our own first generation boards insight hand made lamps as well as special RGB sensors
 that run for a long time on battery and work world-wide.
 
-![re:publica 2015 FEWL installation](https://scontent.ftxl1-1.fna.fbcdn.net/hphotos-xlt1/t31.0-8/11127043_928053903912202_2710786841221231166_o.jpg)
+![re:publica 2015 FEWL installation](ubirch-fewl-exp.jpg)
 
 ## Building
 
@@ -27,6 +27,7 @@ cmake ..
 make
 ```
 
+![ubirch fewl sensor and lamp](ubirch-fewl.jpg)
 ### RGB Sensor Code
 
 The sensor POSTs measures the RGB values in 16 bit and sends them to the server. It will also do
