@@ -24,13 +24,13 @@
 
 #include <Arduino.h>
 #include <UbirchSIM800.h>
-#include <Adafruit_BMP085.h>
 #include <Adafruit_BME280.h>
 #include <Base64.h>
 #include <jsmn.h>
 #include <i2c.h>
 #include <avrsleep.h>
 #include <freeram.h>
+#include <SFE_MicroOLED.h>
 
 extern "C" {
 #include <avrnacl.h>
@@ -47,8 +47,8 @@ extern "C" {
 #define WATCHDOG 6
 
 UbirchSIM800 sim800h = UbirchSIM800();
-Adafruit_BMP085 sensor = Adafruit_BMP085();
-//Adafruit_BME280 sensor = Adafruit_BME280();
+Adafruit_BME280 sensor = Adafruit_BME280();
+MicroOLED oled = MicroOLED(9, 1);
 
 // this counts up as long as we don't have a reset
 static uint16_t loop_counter = 1;
@@ -83,18 +83,36 @@ void send_sensor_data() {
   char *lat = NULL, *lon = NULL, *date = NULL, *time = NULL;
   char *message;
 
+  if (sim800h.location(lat, lon, date, time)) {
+    Serial.print(F(">>> "));
+    Serial.print(date);
+    Serial.print(F(" "));
+    Serial.println(time);
+  }
+
   float temperature = sensor.readTemperature();
   float pressure = sensor.readPressure();
-  float humidity = 0.0/*sensor.readHumidity()*/;
+  float humidity = sensor.readHumidity();
 
   // read battery status
   sim800h.battery(bat_status, bat_percent, bat_voltage);
 
+  char temp_str[7], press_str[6], humid_str[7];
+  dtostrf(temperature, 5, 2, temp_str);
+  dtostrf(pressure / 100, 4, 0, press_str);
+  dtostrf(humidity, 5, 2, humid_str);
   message = (char *)malloc(128);
   sprintf_P(message,
-            PSTR("{\"data\":{\"t\":%.2f,\"p\":%.0f,\"h\":%.2f}}"),
-            temperature, pressure, humidity);
+            PSTR("{\"data\":\"{'t':%s,'p':%s,'h':%s}\"}"),
+            temp_str, press_str, humid_str);
 
+  oled.clear(PAGE);     // Clear the page
+  oled.setCursor(0, 0);
+  oled.print(date); oled.print(" "); oled.print(time); oled.print("\n");
+  oled.print("T:"); oled.print(temp_str); oled.print("C\n");
+  oled.print("P:"); oled.print(press_str); oled.print("hPa\n");
+  oled.print("H:"); oled.print(humid_str); oled.print("rH%");
+  oled.display();
 
   Serial.print(F("message: '"));
   Serial.print(message);
@@ -154,6 +172,15 @@ void setup() {
 
   // edit APN settings in config.h
   sim800h.setAPN(F(FONA_APN), F(FONA_USER), F(FONA_PASS));
+
+  oled.begin();
+  oled.setFontType(0);
+  oled.clear(PAGE);
+  oled.clear(ALL);
+  oled.display();
+  oled.print("ubirch\nGmbH\n");
+  oled.print("(c) 2016");
+  oled.display();
 
   if(!sensor.begin()) {
     Serial.println("Sensor not detected");
